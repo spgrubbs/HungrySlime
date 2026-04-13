@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b0e1a" />
+    <title>SlimeVenture — MVP</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="game">
+        <!-- Path Viewport -->
+        <section id="path" aria-label="Path viewport">
+          <div class="lane-bg" data-lane="0"></div>
+          <div class="lane-bg" data-lane="1"></div>
+          <div class="lane-bg" data-lane="2"></div>
+          <div id="lane-grid"></div>
+          <div id="slime" class="slime">🟢</div>
+          <div id="path-banner" class="path-banner"></div>
+          <div id="level-progress">
+            <div id="level-progress-fill"></div>
+          </div>
+        </section>
+
+        <!-- Inventory -->
+        <section id="inventory" aria-label="Slime inventory">
+          <div class="zone-label">HELD — passive effects</div>
+          <div id="held-zone" class="inv-zone"></div>
+
+          <div class="zone-label">STOMACH — digesting</div>
+          <div id="stomach-zone" class="inv-zone stomach"></div>
+
+          <div class="inv-actions">
+            <button id="grow-btn" class="inv-btn">🧪 Grow (10🪙)</button>
+            <button id="discard-btn" class="inv-btn" disabled>🗑 Discard</button>
+            <span id="inv-hint" class="inv-hint">Tap an item → tap a slot</span>
+          </div>
+        </section>
+
+        <!-- HUD -->
+        <section id="hud" aria-label="HUD">
+          <div class="hud-stats">
+            <span id="hp" class="hud-stat">❤️ 20/20</span>
+            <span id="gold" class="hud-stat">🪙 0</span>
+            <span id="atk" class="hud-stat">⚔️ 1</span>
+            <span id="lvl" class="hud-stat">Lv 1</span>
+          </div>
+          <div class="hud-buttons">
+            <button id="lane-up" class="hud-btn">▲</button>
+            <button id="lane-down" class="hud-btn">▼</button>
+            <button id="pause-btn" class="hud-btn">⏸</button>
+          </div>
+        </section>
+
+        <!-- Modal overlay -->
+        <div id="modal" class="modal hidden">
+          <div class="modal-card">
+            <h2 id="modal-title">Title</h2>
+            <p id="modal-body">Body</p>
+            <div id="modal-actions" class="modal-actions"></div>
+          </div>
+        </div>
+
+        <!-- Event log -->
+        <div id="log" class="log" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./js/game.js"></script>
+  </body>
+</html>
