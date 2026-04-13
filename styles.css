@@ -1,0 +1,429 @@
+/* SlimeVenture MVP — styles */
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #0b0e1a;
+  color: #e8eaf3;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    sans-serif;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+#app {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#game {
+  position: relative;
+  width: min(100vw, 460px);
+  height: min(100dvh, 900px);
+  max-height: 100dvh;
+  display: grid;
+  grid-template-rows: 42% 48% 10%;
+  background: #12172a;
+  border: 1px solid #222a45;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+/* ---------- Path viewport ---------- */
+#path {
+  position: relative;
+  background: linear-gradient(180deg, #1b2340 0%, #0f1526 100%);
+  overflow: hidden;
+  border-bottom: 2px solid #222a45;
+}
+
+.lane-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(100% / 3);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 40px,
+    rgba(255, 255, 255, 0.02) 40px 80px
+  );
+}
+.lane-bg[data-lane="0"] { top: 0%; }
+.lane-bg[data-lane="1"] { top: 33.333%; }
+.lane-bg[data-lane="2"] { top: 66.666%; }
+
+#lane-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.path-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(22px, 6vw, 34px);
+  transition: transform 0.25s ease;
+}
+
+.path-cell .entity {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+
+.path-cell .hp-bar {
+  position: absolute;
+  bottom: 4px;
+  left: 10%;
+  width: 80%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.path-cell .hp-bar > span {
+  display: block;
+  height: 100%;
+  background: #ff5566;
+}
+
+.slime {
+  position: absolute;
+  width: calc(100% / 6);
+  height: calc(100% / 3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(30px, 9vw, 48px);
+  left: 0;
+  top: 0;
+  transition: top 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(80, 255, 120, 0.25));
+  animation: bob 1.6s ease-in-out infinite;
+  z-index: 1;
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.path-banner {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.path-banner.show { opacity: 1; }
+
+#level-progress {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+#level-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6cf, #9f6);
+  transition: width 0.3s ease;
+}
+
+/* ---------- Inventory ---------- */
+#inventory {
+  position: relative;
+  padding: 8px 10px 6px;
+  background: #0f1426;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.zone-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #8a93b8;
+  text-transform: uppercase;
+}
+
+.inv-zone {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px;
+  background: #1a2140;
+  border: 1px solid #2a3356;
+  border-radius: 8px;
+}
+.inv-zone.stomach {
+  background: #22163a;
+  border-color: #402a56;
+}
+
+.slot {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: #0d132a;
+  border: 1px solid #2c355a;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(20px, 5.5vw, 28px);
+  cursor: pointer;
+  transition: transform 0.08s, border-color 0.15s, background 0.15s;
+}
+.slot:active {
+  transform: scale(0.96);
+}
+.slot.empty {
+  color: transparent;
+}
+.inv-zone.stomach .slot {
+  background: #160b28;
+  border-color: #3a2452;
+}
+.slot.selected {
+  border-color: #ffd84d;
+  box-shadow: 0 0 0 2px rgba(255, 216, 77, 0.45);
+}
+.slot.valid-target {
+  border-color: #6cf;
+}
+
+.slot .digest-ring {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: conic-gradient(#9f6 0%, transparent 0%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.slot .rarity {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-shadow: 0 0 2px #000;
+}
+.rarity.common { color: #bcc2d8; }
+.rarity.uncommon { color: #6cf07a; }
+.rarity.rare { color: #5cc5ff; }
+.rarity.legendary { color: #ffb545; }
+
+.inv-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.inv-btn {
+  background: #2a3356;
+  color: #e8eaf3;
+  border: 1px solid #3a4676;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.inv-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.inv-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.inv-hint {
+  font-size: 10px;
+  color: #6b7596;
+  margin-left: auto;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: #080c1a;
+  border-top: 1px solid #222a45;
+  gap: 6px;
+}
+.hud-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hud-stat {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8eaf3;
+}
+.hud-buttons {
+  display: flex;
+  gap: 6px;
+}
+.hud-btn {
+  background: #2a3356;
+  color: #fff;
+  border: 1px solid #3a4676;
+  border-radius: 8px;
+  width: 44px;
+  height: 38px;
+  font-size: 18px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.hud-btn:active {
+  background: #3a4676;
+}
+.hud-btn.active {
+  background: #ffb545;
+  color: #1a1306;
+  border-color: #e08f2a;
+}
+
+/* ---------- Modal ---------- */
+.modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 16px;
+}
+.modal.hidden { display: none; }
+
+.modal-card {
+  background: #161c38;
+  border: 1px solid #2a3356;
+  border-radius: 12px;
+  padding: 18px;
+  max-width: 92%;
+  width: 360px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.modal-card h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+.modal-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #b8bfd9;
+}
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.modal-actions button {
+  background: #2a3356;
+  color: #e8eaf3;
+  border: 1px solid #3a4676;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.modal-actions button:active { background: #3a4676; }
+.modal-actions button.primary {
+  background: #3e6cff;
+  border-color: #5a82ff;
+}
+
+/* ---------- Event log ---------- */
+.log {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 56px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 5;
+}
+.log-entry {
+  align-self: flex-start;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  opacity: 1;
+  animation: logFade 3s forwards;
+}
+@keyframes logFade {
+  0% { opacity: 0; transform: translateY(6px); }
+  10% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Damage float */
+.float {
+  position: absolute;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: floatUp 0.9s forwards;
+}
+.float.dmg { color: #ff5566; }
+.float.heal { color: #7cff8a; }
+.float.gold { color: #ffd84d; }
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-22px); }
+}
+
+/* Disable text selection during gameplay */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}
