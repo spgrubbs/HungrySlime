@@ -12,6 +12,7 @@ import {
   OBSTACLES,
   LOCATIONS,
 } from "./data.js";
+import { initDevTools } from "./devtools.js";
 
 // ---------- Config ----------
 const COLS = 6;
@@ -48,8 +49,20 @@ const state = {
   log: [],
 };
 
+// Dev tools state — toggled from the dev panel, consulted by combat/grow code.
+const devState = {
+  godMode: false,
+  freeGrowth: false,
+};
+
 let entityIdSeq = 1;
 let tickTimer = null;
+
+function setTickIntervalMs(ms) {
+  state.tickInterval = ms;
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(tick, ms);
+}
 
 // ---------- DOM refs ----------
 const $ = (id) => document.getElementById(id);
@@ -407,10 +420,11 @@ function handleEncounter(ent) {
     tryPickupItem(ent.def.itemKey);
     removeEntity(ent);
   } else if (ent.type === "obstacle") {
-    const dmg = Math.max(0, ent.def.damage - getHeldBonuses().damageReduction);
+    const rawDmg = Math.max(0, ent.def.damage - getHeldBonuses().damageReduction);
+    const dmg = devState.godMode ? 0 : rawDmg;
     state.hp -= dmg;
     pushLog(`${ent.def.name} hits you for ${dmg}`);
-    floatText("dmg", `-${dmg}`, slimeEl);
+    if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
     removeEntity(ent);
   } else if (ent.type === "location") {
     // Move onto location and open modal
@@ -441,7 +455,9 @@ function resolveCombatRound(enemy) {
 
   // Enemy hits slime
   const rawDmg = enemy.def.attack || 0;
-  const dmg = Math.max(0, rawDmg - bonuses.damageReduction);
+  const dmg = devState.godMode
+    ? 0
+    : Math.max(0, rawDmg - bonuses.damageReduction);
   state.hp -= dmg;
   if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
 }
@@ -568,7 +584,8 @@ function onDeath() {
 
 function restartRun() {
   state.tick = 0;
-  state.tickInterval = BASE_TICK_MS;
+  // Note: state.tickInterval is intentionally NOT reset so dev-tool speed
+  // settings persist across run resets during testing.
   state.paused = false;
   state.running = true;
   state.hp = 20;
@@ -637,7 +654,7 @@ function discardSelected() {
 }
 
 function growSlime() {
-  const cost = 10 + state.growthLevel * 5;
+  const cost = devState.freeGrowth ? 0 : 10 + state.growthLevel * 5;
   if (state.gold < cost) {
     pushLog(`Need ${cost}🪙 to grow`);
     return;
@@ -756,7 +773,7 @@ function renderInventory() {
   renderZone(heldZoneEl, state.heldSlots, "held");
   renderZone(stomachZoneEl, state.stomachSlots, "stomach");
   discardBtn.disabled = !state.selected;
-  const cost = 10 + state.growthLevel * 5;
+  const cost = devState.freeGrowth ? 0 : 10 + state.growthLevel * 5;
   growBtn.textContent = `🧪 Grow (${cost}🪙)`;
   growBtn.disabled = state.gold < cost;
 }
@@ -859,7 +876,26 @@ function start() {
   hookInput();
   renderAll();
   showBanner("— Level 1 —");
-  tickTimer = setInterval(tick, state.tickInterval);
+  setTickIntervalMs(state.tickInterval);
+  initDevTools({
+    state,
+    devState,
+    setTickIntervalMs,
+    tick,
+    renderAll,
+    effectiveMaxHp,
+    restartRun,
+    spawnEntity,
+    tryPickupItem,
+    updatePauseBtn,
+    showBanner,
+    onLevelComplete,
+    spawnTerminus,
+    COLS,
+    LEVEL_TICK_LENGTH,
+    MAX_LEVEL,
+    BASE_TICK_MS,
+  });
 }
 
 start();
