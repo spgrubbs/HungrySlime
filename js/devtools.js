@@ -20,8 +20,10 @@ export function initDevTools(api) {
     showBanner,
     onLevelComplete,
     spawnTerminus,
+    advanceToNode,
+    rerollMap,
     COLS,
-    LEVEL_TICK_LENGTH,
+    levelTickLength,
     MAX_LEVEL,
     BASE_TICK_MS,
   } = api;
@@ -88,38 +90,38 @@ export function initDevTools(api) {
       // Sweep path of non-terminus entities; force terminus to spawn now.
       state.entities = state.entities.filter((e) => e.type === "terminus");
       if (!state.terminusSpawned) {
-        state.levelTicks = LEVEL_TICK_LENGTH;
+        state.levelTicks = levelTickLength();
         spawnTerminus();
       }
       renderAll();
     },
     skipLevel() {
-      if (state.level >= MAX_LEVEL) {
-        // On the final level, fake a terminus kill and let onLevelComplete fire.
+      // Walk a random outgoing edge in the run map.
+      const node = state.map?.[state.mapNode.row]?.[state.mapNode.col];
+      if (!node) return;
+      const next = [...node.edges]
+        .map((c) => state.map[node.row + 1] && state.map[node.row + 1][c])
+        .filter(Boolean);
+      if (next.length === 0) {
+        // Boss row — fake a kill so the run-complete modal shows.
         state.terminusDefeated = true;
         onLevelComplete();
         return;
       }
-      state.level++;
-      state.levelTicks = 0;
-      state.terminusSpawned = false;
-      state.terminusDefeated = false;
-      state.entities = [];
-      state.paused = false;
-      updatePauseBtn();
-      renderAll();
-      showBanner(`— Level ${state.level} —`);
+      const target = next[Math.floor(Math.random() * next.length)];
+      advanceToNode(target);
     },
     jumpToLevel(lvl) {
-      state.level = Math.max(1, Math.min(MAX_LEVEL, lvl | 0));
-      state.levelTicks = 0;
-      state.terminusSpawned = false;
-      state.terminusDefeated = false;
-      state.entities = [];
-      state.paused = false;
-      updatePauseBtn();
-      renderAll();
-      showBanner(`— Level ${state.level} —`);
+      // Snap to the first active node in that row of the existing map.
+      const targetRow = Math.max(0, Math.min(MAX_LEVEL - 1, (lvl | 0) - 1));
+      const row = state.map && state.map[targetRow];
+      if (!row) return;
+      const target = row.find((n) => n.active);
+      if (!target) return;
+      advanceToNode(target);
+    },
+    rerollMap() {
+      rerollMap();
     },
     resetRun() {
       restartRun();
@@ -171,10 +173,13 @@ export function initDevTools(api) {
     </div>
 
     <div class="dev-section">
-      <label>Level</label>
+      <label>Level / Map</label>
       <div class="dev-row">
         <button type="button" id="dev-to-terminus">→ Terminus</button>
         <button type="button" id="dev-skip">Skip Level</button>
+        <button type="button" id="dev-reroll">Reroll Map</button>
+      </div>
+      <div class="dev-row">
         <select id="dev-level-sel">
           <option value="1">Level 1</option>
           <option value="2">Level 2</option>
@@ -182,7 +187,7 @@ export function initDevTools(api) {
           <option value="4">Level 4</option>
           <option value="5">Level 5</option>
         </select>
-        <button type="button" id="dev-jump">Jump</button>
+        <button type="button" id="dev-jump">Jump to row</button>
       </div>
     </div>
 
@@ -317,6 +322,9 @@ export function initDevTools(api) {
     const lvl = parseInt(panel.querySelector("#dev-level-sel").value, 10);
     actions.jumpToLevel(lvl);
   });
+  panel
+    .querySelector("#dev-reroll")
+    .addEventListener("click", () => actions.rerollMap());
 
   // Spawning
   panel
@@ -342,8 +350,12 @@ export function initDevTools(api) {
       .map(([k, v]) => `${k}(${v})`)
       .join(", ") || "—";
     const speedMult = (BASE_TICK_MS / state.tickInterval).toFixed(2);
+    const node = state.map?.[state.mapNode.row]?.[state.mapNode.col];
+    const nodeType = node ? node.type : "—";
+    const lvlLen = levelTickLength();
     infoEl.innerHTML = `
-      <div>tick: <b>${state.tick}</b> · lv: <b>${state.level}</b> · lTicks: <b>${state.levelTicks}/${LEVEL_TICK_LENGTH}</b></div>
+      <div>tick: <b>${state.tick}</b> · lv: <b>${state.level}</b> · lTicks: <b>${state.levelTicks}/${lvlLen}</b></div>
+      <div>node: <b>${nodeType}</b> @ row <b>${state.mapNode.row}</b> col <b>${state.mapNode.col}</b></div>
       <div>hp: <b>${state.hp}/${effectiveMaxHp()}</b> · gold: <b>${state.gold}</b> · lane: <b>${state.lane}</b></div>
       <div>entities: <b>${state.entities.length}</b> · speed: <b>${speedMult}x</b> · paused: <b>${state.paused ? "yes" : "no"}</b></div>
       <div>god: <b>${devState.godMode ? "ON" : "OFF"}</b> · freeGrow: <b>${devState.freeGrowth ? "ON" : "OFF"}</b></div>

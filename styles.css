@@ -1,4 +1,4 @@
-/* SlimeVenture MVP — styles */
+/* SlimeVenture — styles */
 
 * {
   box-sizing: border-box;
@@ -350,12 +350,14 @@ body {
   margin: 0 0 10px;
   font-size: 20px;
 }
-.modal-card p {
+.modal-card .modal-body {
   margin: 0 0 16px;
   font-size: 14px;
   line-height: 1.4;
   color: #b8bfd9;
+  white-space: pre-wrap;
 }
+.modal-card .modal-body:empty { display: none; }
 .modal-actions {
   display: flex;
   flex-direction: column;
@@ -426,6 +428,88 @@ body {
 button {
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* ---------- Run Map ---------- */
+.map-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.map-subtitle {
+  font-size: 12px;
+  color: #b8bfd9;
+  margin-bottom: 2px;
+}
+.map-svg {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  display: block;
+  background: #0b0e1a;
+  border: 1px solid #2a3356;
+  border-radius: 8px;
+  padding: 4px 0;
+}
+.map-edge {
+  stroke: #2f3a5e;
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+}
+.map-edge.live {
+  stroke: #9f6;
+  stroke-width: 2.5;
+  stroke-dasharray: 0;
+}
+.map-edge.past {
+  stroke: #1a2035;
+  stroke-dasharray: 0;
+}
+.map-node circle {
+  stroke: #1a2035;
+  stroke-width: 2;
+  transition: filter 0.15s, stroke 0.15s;
+}
+.map-node.current circle {
+  stroke: #fff;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px #fff);
+}
+.map-node.reachable circle {
+  stroke: #9f6;
+  stroke-width: 2.5;
+  cursor: pointer;
+  filter: drop-shadow(0 0 6px rgba(153, 255, 102, 0.7));
+  animation: mapPulse 1.6s ease-in-out infinite;
+}
+.map-node.reachable {
+  cursor: pointer;
+}
+.map-node.locked circle {
+  opacity: 0.45;
+}
+.map-node.past circle {
+  opacity: 0.35;
+}
+.map-node text {
+  pointer-events: none;
+}
+@keyframes mapPulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(153, 255, 102, 0.5)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(153, 255, 102, 0.95)); }
+}
+.map-legend {
+  font-size: 10px;
+  color: #889;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+.map-hint {
+  font-size: 11px;
+  color: #9f6;
+  text-align: center;
 }
 
 /* ---------- Dev Tools ---------- */
