@@ -1,4 +1,4 @@
-// SlimeVenture MVP — data definitions
+// SlimeVenture — data definitions
 // Items, enemies, obstacles, locations. Kept data-driven per GDD §12.4.
 
 export const RARITIES = {
@@ -8,7 +8,7 @@ export const RARITIES = {
   legendary: "L",
 };
 
-/** Items. Shapes simplified to 1x1 for the MVP. */
+/** Items. Shapes simplified to 1x1 for now (Tetris-style shapes are planned). */
 export const ITEMS = {
   rusty_sword: {
     id: "rusty_sword",

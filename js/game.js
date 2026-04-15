@@ -1,6 +1,6 @@
-// SlimeVenture MVP — main game module
+// SlimeVenture — main game module
 // Implements: tick engine, 3-lane treadmill, inventory with held/stomach zones,
-// digestion, bump combat, basic level loop with terminus, pause, growth, HUD.
+// digestion, bump combat, branching run map, pause, growth, HUD.
 // Touch-friendly: tap-to-select-then-tap-to-place for inventory management.
 
 import {
@@ -13,13 +13,14 @@ import {
   LOCATIONS,
 } from "./data.js";
 import { initDevTools } from "./devtools.js";
+import { generateRunMap, renderMapSVG, NODE_TYPES } from "./map.js";
 
 // ---------- Config ----------
 const COLS = 6;
 const LANES = 3;
 const SLIME_COL = 0; // slime is anchored at leftmost visible column
 const BASE_TICK_MS = 1500;
-const LEVEL_TICK_LENGTH = 42; // ticks before terminus spawns
+const DEFAULT_LEVEL_TICK_LENGTH = 42; // fallback when a node has no tickLength
 const MAX_LEVEL = 5;
 
 // ---------- State ----------
@@ -36,6 +37,9 @@ const state = {
   levelTicks: 0,
   terminusSpawned: false,
   terminusDefeated: false,
+  // Run map (Slay-the-Spire style branching grid). Generated in start().
+  map: null,
+  mapNode: { row: 0, col: 0 },
   // Path entities: keyed by id, each has {id,type,def,lane,col,hp,maxHp}
   entities: [],
   // Inventory: flat arrays of slots; each slot is null or item instance
@@ -62,6 +66,21 @@ function setTickIntervalMs(ms) {
   state.tickInterval = ms;
   if (tickTimer) clearInterval(tickTimer);
   tickTimer = setInterval(tick, ms);
+}
+
+function currentMapNode() {
+  if (!state.map) return null;
+  const { row, col } = state.mapNode;
+  return state.map[row] && state.map[row][col];
+}
+
+function currentNodeConfig() {
+  const node = currentMapNode();
+  return (node && NODE_TYPES[node.type]) || NODE_TYPES.combat;
+}
+
+function levelTickLength() {
+  return currentNodeConfig().tickLength || DEFAULT_LEVEL_TICK_LENGTH;
 }
 
 // ---------- DOM refs ----------
@@ -245,21 +264,22 @@ function removeEntity(ent) {
 }
 
 function spawnRandomPathEntity() {
-  // Pick a random lane and an entity type based on level
+  // Spawn distribution is driven by the current map node's type.
   const lane = rand(LANES);
   const col = COLS - 1;
 
   // Don't spawn on top of another entity in same lane/col
   if (state.entities.some((e) => e.lane === lane && e.col === col)) return;
 
-  const roll = Math.random();
-  if (roll < 0.5) {
-    // Enemy
+  const w = currentNodeConfig().spawnWeights;
+  const total = w.enemy + w.item + w.obstacle + w.location;
+  let roll = Math.random() * total;
+
+  if ((roll -= w.enemy) < 0) {
     const pool = ENEMY_POOL_BY_LEVEL[state.level] || ENEMY_POOL_BY_LEVEL[1];
     const enemyKey = pick(pool);
     spawnEntity(ENEMIES[enemyKey], "enemy", lane, col);
-  } else if (roll < 0.78) {
-    // Item pickup
+  } else if ((roll -= w.item) < 0) {
     const itemKey = randomItemKey();
     spawnEntity(
       { id: itemKey, emoji: ITEMS[itemKey].emoji, itemKey },
@@ -267,18 +287,28 @@ function spawnRandomPathEntity() {
       lane,
       col
     );
-  } else if (roll < 0.92) {
-    // Obstacle
+  } else if ((roll -= w.obstacle) < 0) {
     const obs = Math.random() < 0.7 ? OBSTACLES.rock : OBSTACLES.spikes;
     spawnEntity(obs, "obstacle", lane, col);
   } else {
-    // Location: fountain for MVP
     spawnEntity(LOCATIONS.fountain, "location", lane, col);
   }
 }
 
 function spawnTerminus() {
-  const def = TERMINI[state.level] || TERMINI[1];
+  const baseDef = TERMINI[state.level] || TERMINI[1];
+  const cfg = currentNodeConfig();
+  // Elite nodes buff the level's terminus.
+  let def = baseDef;
+  if (cfg.terminusHpMult || cfg.terminusAtkBonus || cfg.terminusGoldMult) {
+    def = {
+      ...baseDef,
+      name: `Elite ${baseDef.name}`,
+      hp: Math.round(baseDef.hp * (cfg.terminusHpMult || 1)),
+      attack: (baseDef.attack || 0) + (cfg.terminusAtkBonus || 0),
+      gold: Math.round((baseDef.gold || 0) * (cfg.terminusGoldMult || 1)),
+    };
+  }
   // Spawn in the middle lane
   spawnEntity(def, "terminus", 1, COLS - 1);
   state.terminusSpawned = true;
@@ -325,7 +355,7 @@ function tick() {
   //    Combat: when enemy.col == SLIME_COL && same lane, combat each tick.
   //    Simpler rule: an entity can't move onto the slime's cell. It stops at col 1
   //    if slime is in its lane, then on next tick when slime occupies, bump combat.
-  // For MVP, treat the slime's cell itself as the combat cell.
+  // For now, treat the slime's cell itself as the combat cell.
 
   // Sort entities by col ascending so leftmost moves first (no collisions)
   const sorted = [...state.entities].sort((a, b) => a.col - b.col);
@@ -381,10 +411,11 @@ function tick() {
   state.entities = state.entities.filter((e) => e.col >= 0);
 
   // 7. Level progression — spawn things
-  if (state.levelTicks < LEVEL_TICK_LENGTH && !state.terminusSpawned) {
+  const lvlLen = levelTickLength();
+  if (state.levelTicks < lvlLen && !state.terminusSpawned) {
     // Normal spawning
     if (state.levelTicks % 2 === 0) spawnRandomPathEntity();
-  } else if (!state.terminusSpawned && state.levelTicks >= LEVEL_TICK_LENGTH) {
+  } else if (!state.terminusSpawned && state.levelTicks >= lvlLen) {
     // Time for the terminus. Make sure the lane is clear.
     spawnTerminus();
   }
@@ -501,7 +532,7 @@ function openLocation(ent) {
   } else if (loc.id === "shop") {
     openModal({
       title: "🏪 Shop",
-      body: "Shops coming soon. (MVP stub)",
+      body: "A shop. Coming soon.",
       actions: [
         {
           label: "Continue",
@@ -523,10 +554,11 @@ function openLocation(ent) {
 function onLevelComplete() {
   state.paused = true;
   updatePauseBtn();
-  if (state.level >= MAX_LEVEL) {
+  const node = currentMapNode();
+  if (node && node.type === "boss") {
     openModal({
       title: "🏆 Run Complete!",
-      body: `You defeated the Gelatinous King!\n\nGold: ${state.gold} · HP: ${state.hp}/${effectiveMaxHp()}\n\nThe MVP ends here. Future: meta-progression & more levels.`,
+      body: `You defeated the Gelatinous King!\n\nGold: ${state.gold} · HP: ${state.hp}/${effectiveMaxHp()}\n\nMeta-progression and more content coming.`,
       actions: [
         {
           label: "New Run",
@@ -540,28 +572,60 @@ function onLevelComplete() {
     });
     return;
   }
+  openMapPicker();
+}
+
+function openMapPicker() {
+  const node = currentMapNode();
+  const cfg = NODE_TYPES[node?.type] || NODE_TYPES.combat;
+
+  const wrap = document.createElement("div");
+  wrap.className = "map-wrap";
+
+  const subtitle = document.createElement("div");
+  subtitle.className = "map-subtitle";
+  subtitle.textContent = `${cfg.emoji} ${cfg.label} cleared · HP ${state.hp}/${effectiveMaxHp()} · 🪙 ${state.gold}`;
+  wrap.appendChild(subtitle);
+
+  const svg = renderMapSVG(
+    state.map,
+    state.mapNode.row,
+    state.mapNode.col,
+    (next) => advanceToNode(next)
+  );
+  wrap.appendChild(svg);
+
+  const legend = document.createElement("div");
+  legend.className = "map-legend";
+  legend.innerHTML =
+    "⚔️ Combat &nbsp; 💎 Treasure &nbsp; ❓ Event &nbsp; ⭐ Elite &nbsp; 👑 Boss";
+  wrap.appendChild(legend);
+
+  const hint = document.createElement("div");
+  hint.className = "map-hint";
+  hint.textContent = "Tap a glowing node to choose your path.";
+  wrap.appendChild(hint);
+
   openModal({
-    title: `Level ${state.level} cleared!`,
-    body: `HP: ${state.hp}/${effectiveMaxHp()} · Gold: ${state.gold}\n\nThe path ahead branches, but for the MVP you simply advance.`,
-    actions: [
-      {
-        label: `Advance to Level ${state.level + 1}`,
-        primary: true,
-        onClick: () => {
-          state.level++;
-          state.levelTicks = 0;
-          state.terminusSpawned = false;
-          state.terminusDefeated = false;
-          state.entities = [];
-          closeModal();
-          state.paused = false;
-          updatePauseBtn();
-          showBanner(`— Level ${state.level} —`);
-          renderAll();
-        },
-      },
-    ],
+    title: "Choose your path",
+    bodyEl: wrap,
+    actions: [],
   });
+}
+
+function advanceToNode(node) {
+  state.mapNode = { row: node.row, col: node.col };
+  state.level = node.row + 1;
+  state.levelTicks = 0;
+  state.terminusSpawned = false;
+  state.terminusDefeated = false;
+  state.entities = [];
+  closeModal();
+  state.paused = false;
+  updatePauseBtn();
+  const cfg = NODE_TYPES[node.type] || NODE_TYPES.combat;
+  showBanner(`— Level ${state.level}: ${cfg.label} —`, 1800);
+  renderAll();
 }
 
 function onDeath() {
@@ -603,9 +667,12 @@ function restartRun() {
   state.buffs = {};
   state.regenCounter = 0;
   state.growthLevel = 0;
+  state.map = generateRunMap();
+  state.mapNode = { row: 0, col: 0 };
+  closeModal();
   updatePauseBtn();
   renderAll();
-  showBanner("— Level 1 —");
+  showBanner("— Level 1: Start —");
 }
 
 // ---------- Inventory interactions (tap-to-select-then-place) ----------
@@ -707,11 +774,16 @@ function growSlime() {
 }
 
 // ---------- Modal ----------
-function openModal({ title, body, actions }) {
+function openModal({ title, body, bodyEl, actions }) {
   modalTitle.textContent = title;
-  modalBody.textContent = body;
+  modalBody.innerHTML = "";
+  if (bodyEl) {
+    modalBody.appendChild(bodyEl);
+  } else if (body != null) {
+    modalBody.textContent = body;
+  }
   modalActions.innerHTML = "";
-  for (const a of actions) {
+  for (const a of actions || []) {
     const btn = document.createElement("button");
     btn.textContent = a.label;
     if (a.primary) btn.className = "primary";
@@ -822,10 +894,7 @@ function updateHUD() {
 }
 
 function updateProgress() {
-  const pct = Math.min(
-    100,
-    (state.levelTicks / LEVEL_TICK_LENGTH) * 100
-  );
+  const pct = Math.min(100, (state.levelTicks / levelTickLength()) * 100);
   progressFill.style.width = pct + "%";
 }
 
@@ -874,8 +943,10 @@ function hookInput() {
 // ---------- Boot ----------
 function start() {
   hookInput();
+  state.map = generateRunMap();
+  state.mapNode = { row: 0, col: 0 };
   renderAll();
-  showBanner("— Level 1 —");
+  showBanner("— Level 1: Start —");
   setTickIntervalMs(state.tickInterval);
   initDevTools({
     state,
@@ -891,8 +962,22 @@ function start() {
     showBanner,
     onLevelComplete,
     spawnTerminus,
+    advanceToNode,
+    rerollMap: () => {
+      state.map = generateRunMap();
+      state.mapNode = { row: 0, col: 0 };
+      state.level = 1;
+      state.levelTicks = 0;
+      state.terminusSpawned = false;
+      state.terminusDefeated = false;
+      state.entities = [];
+      state.paused = false;
+      updatePauseBtn();
+      renderAll();
+      showBanner("— Level 1: Start —");
+    },
     COLS,
-    LEVEL_TICK_LENGTH,
+    levelTickLength,
     MAX_LEVEL,
     BASE_TICK_MS,
   });
