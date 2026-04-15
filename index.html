@@ -12,8 +12,10 @@
   </head>
   <body>
     <div id="app">
-      <div id="game">
-        <!-- Path Viewport -->
+      <div id="game" class="scene-hub">
+        <!-- Top viewport: hosts EITHER the running treadmill (#path)
+             OR the overworld map (#overworld) OR a text event (#event-view).
+             The active one is controlled by the .scene-* class on #game. -->
         <section id="path" aria-label="Path viewport">
           <div class="lane-bg" data-lane="0"></div>
           <div class="lane-bg" data-lane="1"></div>
@@ -26,8 +28,30 @@
           </div>
         </section>
 
+        <section id="overworld" aria-label="Overworld map">
+          <div class="overworld-header">
+            <span id="overworld-title">Choose your path</span>
+            <span id="overworld-status"></span>
+          </div>
+          <div id="overworld-map"></div>
+        </section>
+
+        <section id="event-view" aria-label="Event encounter">
+          <div class="event-card">
+            <h3 id="event-title">Event</h3>
+            <p id="event-text">Text</p>
+            <div id="event-choices" class="event-choices"></div>
+            <div id="event-result" class="event-result hidden"></div>
+            <button id="event-continue" class="event-continue hidden">
+              Continue
+            </button>
+          </div>
+        </section>
+
         <!-- Inventory -->
         <section id="inventory" aria-label="Slime inventory">
+          <div id="mutation-strip" class="mutation-strip"></div>
+
           <div class="zone-label">HELD — passive effects</div>
           <div id="held-zone" class="inv-zone"></div>
 
@@ -38,6 +62,43 @@
             <button id="grow-btn" class="inv-btn">🧪 Grow (10🪙)</button>
             <button id="discard-btn" class="inv-btn" disabled>🗑 Discard</button>
             <span id="inv-hint" class="inv-hint">Tap an item → tap a slot</span>
+          </div>
+        </section>
+
+        <!-- Hub overlay (slime village). Visible only when scene-hub. -->
+        <section id="hub" aria-label="Slime Hub">
+          <div class="hub-inner">
+            <div class="hub-title">SLIMEVENTURE</div>
+            <div class="hub-sub">A wandering slime, a hungry world</div>
+            <div class="hub-slime">🟢</div>
+            <div class="hub-meta-line" id="hub-meta-line">XP: 0 · Lifetime: 0</div>
+            <div class="hub-buildings">
+              <button class="hub-building primary" id="hub-start">
+                <div class="hub-icon">🌱</div>
+                <div class="hub-name">Begin Adventure</div>
+                <div class="hub-desc">Set out into the wilds</div>
+              </button>
+              <button class="hub-building" id="hub-upgrades">
+                <div class="hub-icon">🧪</div>
+                <div class="hub-name">Upgrade Lab</div>
+                <div class="hub-desc">Spend Slime XP on permanent boons</div>
+              </button>
+              <button class="hub-building" id="hub-mutations">
+                <div class="hub-icon">🧬</div>
+                <div class="hub-name">Mutation Den</div>
+                <div class="hub-desc">Coming soon</div>
+              </button>
+              <button class="hub-building" id="hub-codex">
+                <div class="hub-icon">📖</div>
+                <div class="hub-name">Slime Codex</div>
+                <div class="hub-desc">Coming soon</div>
+              </button>
+              <button class="hub-building" id="hub-cosmetics">
+                <div class="hub-icon">🎨</div>
+                <div class="hub-name">Wardrobe</div>
+                <div class="hub-desc">Coming soon</div>
+              </button>
+            </div>
           </div>
         </section>
 

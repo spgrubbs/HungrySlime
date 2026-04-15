@@ -331,7 +331,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: 100;
   padding: 16px;
 }
 .modal.hidden { display: none; }
@@ -779,4 +779,319 @@ button {
 }
 .meta-upgrade.owned .meta-foot {
   color: #4a6;
+}
+
+/* ====================================================================== */
+/* Scene system: a class on #game determines which top-of-screen view shows */
+/* ====================================================================== */
+
+/* All three top-region views occupy the same grid cell; we hide the
+   inactive ones via the scene-* class on #game. */
+#path,
+#overworld,
+#event-view {
+  grid-row: 1;
+}
+#overworld,
+#event-view {
+  display: none;
+  background: linear-gradient(180deg, #141a30 0%, #0c1020 100%);
+  border-bottom: 2px solid #222a45;
+  overflow: hidden;
+  position: relative;
+}
+
+#game.scene-run #path { display: block; }
+#game.scene-run #overworld,
+#game.scene-run #event-view { display: none; }
+
+#game.scene-overworld #path { display: none; }
+#game.scene-overworld #overworld { display: flex; }
+
+#game.scene-event #path { display: none; }
+#game.scene-event #event-view { display: flex; }
+
+/* While in the hub, hide the entire game shell underneath the overlay. */
+#game.scene-hub #path,
+#game.scene-hub #overworld,
+#game.scene-hub #event-view,
+#game.scene-hub #inventory,
+#game.scene-hub #hud,
+#game.scene-hub #log {
+  visibility: hidden;
+}
+#game:not(.scene-hub) #hub {
+  display: none;
+}
+
+/* ---------- Hub overlay ---------- */
+#hub {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #1a2546 0%, #0a0f1e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  overflow-y: auto;
+}
+.hub-inner {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px 18px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.hub-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: #9f6;
+  text-shadow: 0 2px 12px rgba(120, 255, 100, 0.35);
+}
+.hub-sub {
+  font-size: 12px;
+  color: #abc;
+  letter-spacing: 1px;
+}
+.hub-slime {
+  font-size: 64px;
+  margin: 6px 0 0;
+  filter: drop-shadow(0 4px 12px rgba(120, 255, 100, 0.35));
+  animation: bob 2s ease-in-out infinite;
+}
+.hub-meta-line {
+  font-size: 12px;
+  color: #ffd84d;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.hub-buildings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+}
+.hub-building {
+  background: #1a2140;
+  border: 1px solid #2a3356;
+  border-radius: 10px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  cursor: pointer;
+  color: #dfe;
+  font-family: inherit;
+  transition: transform 0.1s, border-color 0.15s, background 0.15s;
+}
+.hub-building:hover {
+  background: #232c54;
+  border-color: #3a4a78;
+  transform: translateY(-1px);
+}
+.hub-building:active {
+  transform: translateY(0);
+}
+.hub-building.primary {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, #1f3a26 0%, #1a2a20 100%);
+  border-color: #5a8;
+}
+.hub-building.primary:hover {
+  background: linear-gradient(180deg, #285034 0%, #1f3a26 100%);
+  border-color: #9f6;
+}
+.hub-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.hub-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dfe;
+}
+.hub-building.primary .hub-name {
+  color: #9f6;
+}
+.hub-desc {
+  font-size: 10px;
+  color: #889;
+  line-height: 1.3;
+}
+
+/* ---------- Overworld (top-of-screen map view) ---------- */
+#overworld {
+  flex-direction: column;
+  padding: 6px 10px 8px;
+  gap: 4px;
+}
+.overworld-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #9f6;
+}
+#overworld-status {
+  color: #abc;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+#overworld-map {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+#overworld-map .map-svg {
+  max-height: 100%;
+  width: auto;
+  background: transparent;
+  border: none;
+}
+
+/* ---------- Event view (text encounter) ---------- */
+#event-view {
+  flex-direction: column;
+  padding: 8px 12px 10px;
+  overflow-y: auto;
+}
+.event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+}
+.event-card h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #ffd84d;
+  letter-spacing: 1px;
+}
+.event-card p {
+  margin: 0;
+  font-size: 11px;
+  color: #cde;
+  line-height: 1.4;
+  font-style: italic;
+}
+.event-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.event-choice {
+  background: #1a2140;
+  border: 1px solid #2a3356;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #dfe;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, border-color 0.15s;
+}
+.event-choice:hover:not(:disabled) {
+  background: #243057;
+  border-color: #456;
+}
+.event-choice:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.event-choice.subtle {
+  border-style: dashed;
+  color: #abc;
+}
+.event-choice.mutation-choice {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  grid-template-rows: auto auto;
+  gap: 1px 8px;
+  padding: 8px 10px;
+  align-items: center;
+}
+.mutation-choice .mc-icon {
+  grid-row: 1 / -1;
+  font-size: 22px;
+  text-align: center;
+}
+.mutation-choice .mc-name {
+  font-weight: 700;
+  font-size: 12px;
+  color: #9f6;
+}
+.mutation-choice .mc-desc {
+  font-size: 10px;
+  color: #abc;
+  line-height: 1.3;
+}
+.event-result {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 3px solid #9f6;
+  font-size: 11px;
+  color: #dfe;
+  line-height: 1.4;
+}
+.event-result.hidden {
+  display: none;
+}
+.event-continue {
+  margin-top: auto;
+  align-self: stretch;
+  background: #2a4a2a;
+  border: 1px solid #9f6;
+  color: #9f6;
+  border-radius: 6px;
+  padding: 8px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.event-continue.hidden {
+  display: none;
+}
+
+/* ---------- Mutation strip in inventory ---------- */
+.mutation-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 0;
+}
+.mutation-strip.empty::before {
+  content: "MUTATIONS — collect from treasure";
+  font-size: 9px;
+  color: #555;
+  letter-spacing: 1px;
+}
+.mut-chip {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: #1f1430;
+  border: 1px solid #6b3f9c;
+  border-radius: 4px;
+  cursor: help;
 }
