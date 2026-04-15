@@ -23,6 +23,7 @@ export function initDevTools(api) {
     advanceToNode,
     rerollMap,
     openMetaMenu,
+    goToHub,
     grantMetaXp,
     resetMeta,
     COLS,
@@ -219,9 +220,10 @@ export function initDevTools(api) {
     </div>
 
     <div class="dev-section">
-      <label>Meta Progression</label>
+      <label>Meta / Hub</label>
       <div class="dev-row">
-        <button type="button" id="dev-meta-open">Open Meta</button>
+        <button type="button" id="dev-hub">→ Hub</button>
+        <button type="button" id="dev-meta-open">Open Lab</button>
         <button type="button" id="dev-meta-xp">+50 XP</button>
         <button type="button" id="dev-meta-reset">Reset Meta</button>
       </div>
@@ -354,13 +356,14 @@ export function initDevTools(api) {
     .querySelector("#dev-killall")
     .addEventListener("click", () => actions.killAllEnemies());
 
-  // Meta
+  // Meta / Hub
+  panel.querySelector("#dev-hub").addEventListener("click", () => {
+    togglePanel(false);
+    if (goToHub) goToHub();
+  });
   panel.querySelector("#dev-meta-open").addEventListener("click", () => {
     togglePanel(false);
-    openMetaMenu(() => {
-      state.paused = false;
-      updatePauseBtn();
-    });
+    openMetaMenu();
   });
   panel.querySelector("#dev-meta-xp").addEventListener("click", () => {
     grantMetaXp(50);

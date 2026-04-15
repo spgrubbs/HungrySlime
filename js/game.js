@@ -1,6 +1,7 @@
 // SlimeVenture — main game module
-// Implements: tick engine, 3-lane treadmill, inventory with held/stomach zones,
-// digestion, bump combat, branching run map, pause, growth, HUD.
+// Scenes: hub → run → overworld → event → run → ... → run-end
+// Implements tick engine, 3-lane treadmill, inventory, digestion, combat,
+// branching overworld map, text events, mutations, meta progression hub.
 // Touch-friendly: tap-to-select-then-tap-to-place for inventory management.
 
 import {
@@ -27,6 +28,12 @@ import {
   purchase,
   computeRunModifiers,
 } from "./meta.js";
+import { EVENTS, rollEvent } from "./events.js";
+import {
+  MUTATIONS,
+  rollMutationChoices,
+  getMutationBonuses,
+} from "./mutations.js";
 
 // ---------- Config ----------
 const COLS = 6;
@@ -38,10 +45,12 @@ const MAX_LEVEL = 5;
 
 // ---------- State ----------
 const state = {
+  // "hub" | "run" | "overworld" | "event"
+  scene: "hub",
   tick: 0,
   tickInterval: BASE_TICK_MS,
   paused: false,
-  running: true,
+  running: false,
   hp: 20,
   maxHp: 20,
   gold: 0,
@@ -50,7 +59,7 @@ const state = {
   levelTicks: 0,
   terminusSpawned: false,
   terminusDefeated: false,
-  // Run map (Slay-the-Spire style branching grid). Generated in start().
+  // Run map (Slay-the-Spire style branching grid). Generated when starting a run.
   map: null,
   mapNode: { row: 0, col: 0 },
   // Path entities: keyed by id, each has {id,type,def,lane,col,hp,maxHp}
@@ -62,8 +71,11 @@ const state = {
   selected: null, // {zone: "held"|"stomach", index: number}
   buffs: {}, // name -> remaining ticks
   regenCounter: 0,
+  passiveCounter: 0, // separate counter for mutation passive regen
   growthLevel: 0, // number of times player has grown
   log: [],
+  // Mutations earned this run (powerful relic-like passives, no inv slot).
+  mutations: [],
   // Per-run counters, used for XP calculation at run end.
   runStats: {
     levelsCompleted: 0,
@@ -77,6 +89,8 @@ const state = {
   // Modifier accumulator derived from state.meta.unlocks, recomputed at the
   // start of every run.
   runMods: null,
+  // Cached mutation-bonus accumulator, refreshed when mutations change.
+  mutBonuses: null,
 };
 
 // Dev tools state — toggled from the dev panel, consulted by combat/grow code.
@@ -109,6 +123,25 @@ function levelTickLength() {
   return currentNodeConfig().tickLength || DEFAULT_LEVEL_TICK_LENGTH;
 }
 
+// ---------- Scene management ----------
+// Switching the visible top-of-screen view is just a class swap on #game.
+// Tick loop only advances when scene === "run" (and not paused).
+function setScene(name) {
+  state.scene = name;
+  const gameEl = document.getElementById("game");
+  gameEl.classList.remove(
+    "scene-hub",
+    "scene-run",
+    "scene-overworld",
+    "scene-event"
+  );
+  gameEl.classList.add(`scene-${name}`);
+}
+
+function refreshMutationBonuses() {
+  state.mutBonuses = getMutationBonuses(state.mutations);
+}
+
 // ---------- DOM refs ----------
 const $ = (id) => document.getElementById(id);
 const path = $("path");
@@ -129,6 +162,14 @@ const modalEl = $("modal");
 const modalTitle = $("modal-title");
 const modalBody = $("modal-body");
 const modalActions = $("modal-actions");
+const overworldMapEl = $("overworld-map");
+const overworldStatusEl = $("overworld-status");
+const eventTitleEl = $("event-title");
+const eventTextEl = $("event-text");
+const eventChoicesEl = $("event-choices");
+const eventResultEl = $("event-result");
+const eventContinueBtn = $("event-continue");
+const mutationStripEl = $("mutation-strip");
 const logEl = $("log");
 const progressFill = $("level-progress-fill");
 const banner = $("path-banner");
@@ -237,6 +278,12 @@ function addGold(amount) {
 function applyDigest(item) {
   const d = item.def.digest || {};
   state.runStats.itemsDigested++;
+  // Hungry Void mutation: every digestion heals a flat amount.
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  if (mut.digestHeal > 0 && state.hp < effectiveMaxHp()) {
+    state.hp = Math.min(effectiveMaxHp(), state.hp + mut.digestHeal);
+    floatText("heal", `+${mut.digestHeal}`, slimeEl);
+  }
   if (d.heal) {
     state.hp = Math.min(effectiveMaxHp(), state.hp + d.heal);
     pushLog(`Digested ${item.def.name}: +${d.heal} HP`);
@@ -274,7 +321,8 @@ function applyDigest(item) {
 
 function effectiveMaxHp() {
   const { maxHpBonus } = getHeldBonuses();
-  return state.maxHp + maxHpBonus;
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  return state.maxHp + maxHpBonus + (mut.maxHpBonus || 0);
 }
 
 // ---------- Path / entities ----------
@@ -352,9 +400,12 @@ function spawnTerminus() {
 
 // ---------- Tick logic ----------
 function tick() {
-  if (!state.running || state.paused) return;
+  // Tick only advances during a live run. Hub/overworld/event scenes are inert.
+  if (state.scene !== "run" || !state.running || state.paused) return;
   state.tick++;
   state.levelTicks++;
+
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
 
   // 1. Apply passive regen from held items
   const bonuses = getHeldBonuses();
@@ -367,14 +418,27 @@ function tick() {
     }
   }
 
+  // 1b. Mutation passive regen (Pulsing Core).
+  if (mut.passiveRegen > 0 && mut.passiveRegenInterval > 0) {
+    state.passiveCounter++;
+    if (state.passiveCounter >= mut.passiveRegenInterval) {
+      state.passiveCounter = 0;
+      if (state.hp < effectiveMaxHp()) {
+        state.hp = Math.min(effectiveMaxHp(), state.hp + mut.passiveRegen);
+        floatText("heal", `+${mut.passiveRegen}`, slimeEl);
+      }
+    }
+  }
+
   // 2. Tick active buffs
   for (const [name, ticks] of Object.entries(state.buffs)) {
     state.buffs[name] = ticks - 1;
     if (state.buffs[name] <= 0) delete state.buffs[name];
   }
 
-  // 3. Advance digestion for stomach items (quickDigest upgrade speeds this up)
-  const digestStep = state.runMods?.digestSpeedMult || 1;
+  // 3. Advance digestion for stomach items (quickDigest upgrade + Iron Stomach mutation).
+  const digestStep =
+    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1);
   for (let i = 0; i < state.stomachSlots.length; i++) {
     const item = state.stomachSlots[i];
     if (!item) continue;
@@ -428,8 +492,8 @@ function tick() {
     // Slime not in this lane: entities in col 0 just despawn next tick
   }
 
-  // 4b. Magnetic Body: vacuum items from adjacent lanes at slime's column.
-  if (state.runMods?.magneticBody) {
+  // 4b. Magnetic Body / Magnetic Membrane: vacuum items from adjacent lanes.
+  if (state.runMods?.magneticBody || mut.magneticBody) {
     const magnetTargets = state.entities.filter(
       (e) =>
         e.type === "item" &&
@@ -500,7 +564,10 @@ function handleEncounter(ent) {
     tryPickupItem(ent.def.itemKey);
     removeEntity(ent);
   } else if (ent.type === "obstacle") {
-    const rawDmg = Math.max(0, ent.def.damage - getHeldBonuses().damageReduction);
+    const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+    const reduction =
+      getHeldBonuses().damageReduction + (mut.damageReduction || 0);
+    const rawDmg = Math.max(0, ent.def.damage - reduction);
     const dmg = devState.godMode ? 0 : rawDmg;
     state.hp -= dmg;
     pushLog(`${ent.def.name} hits you for ${dmg}`);
@@ -515,15 +582,17 @@ function handleEncounter(ent) {
 
 function resolveCombatRound(enemy) {
   const bonuses = getHeldBonuses();
-  // Slime hits enemy
-  const slimeDmg = bonuses.attack;
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  // Slime hits enemy (Forked Pseudopod adds a flat +1).
+  const slimeDmg = bonuses.attack + (mut.attackBonus || 0);
   enemy.hp -= slimeDmg;
   floatText("dmg", `-${slimeDmg}`, slimeEl);
 
   if (enemy.hp <= 0) {
     // Loot
     state.runStats.enemiesDefeated++;
-    const goldDrop = enemy.def.gold || 0;
+    const baseGold = enemy.def.gold || 0;
+    const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1));
     addGold(goldDrop);
     pushLog(`Defeated ${enemy.def.name} (+${goldDrop}🪙)`);
     if (enemy.def.dropChance && enemy.def.dropPool && Math.random() < enemy.def.dropChance) {
@@ -534,13 +603,32 @@ function resolveCombatRound(enemy) {
     return;
   }
 
+  // Bouncy Body: chance to dodge entirely.
+  if (mut.dodgeChance > 0 && Math.random() < mut.dodgeChance) {
+    floatText("heal", "DODGE", slimeEl);
+    return;
+  }
+
   // Enemy hits slime
   const rawDmg = enemy.def.attack || 0;
-  const dmg = devState.godMode
-    ? 0
-    : Math.max(0, rawDmg - bonuses.damageReduction);
+  const reduction = bonuses.damageReduction + (mut.damageReduction || 0);
+  const dmg = devState.godMode ? 0 : Math.max(0, rawDmg - reduction);
   state.hp -= dmg;
   if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
+
+  // Acidic Skin: thorns reflect when actually struck.
+  if (dmg > 0 && mut.thorns > 0) {
+    enemy.hp -= mut.thorns;
+    floatText("dmg", `-${mut.thorns}`, slimeEl);
+    if (enemy.hp <= 0) {
+      state.runStats.enemiesDefeated++;
+      const baseGold = enemy.def.gold || 0;
+      const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1));
+      addGold(goldDrop);
+      pushLog(`${enemy.def.name} dissolved on your skin (+${goldDrop}🪙)`);
+      removeEntity(enemy);
+    }
+  }
 }
 
 // ---------- Locations ----------
@@ -612,60 +700,237 @@ function onLevelComplete() {
     openRunEndScreen(true);
     return;
   }
-  openMapPicker();
+  openOverworld();
 }
 
-function openMapPicker() {
-  const node = currentMapNode();
-  const cfg = NODE_TYPES[node?.type] || NODE_TYPES.combat;
+// Render the overworld map into the top-of-screen viewport (replacing the
+// treadmill). The user picks a glowing node which then transitions into the
+// appropriate scene for that node type.
+function openOverworld() {
+  setScene("overworld");
+  state.paused = true;
+  updatePauseBtn();
+  renderOverworld();
+}
 
-  const wrap = document.createElement("div");
-  wrap.className = "map-wrap";
-
-  const subtitle = document.createElement("div");
-  subtitle.className = "map-subtitle";
-  subtitle.textContent = `${cfg.emoji} ${cfg.label} cleared · HP ${state.hp}/${effectiveMaxHp()} · 🪙 ${state.gold}`;
-  wrap.appendChild(subtitle);
-
+function renderOverworld() {
+  if (!state.map) return;
+  overworldMapEl.innerHTML = "";
   const svg = renderMapSVG(
     state.map,
     state.mapNode.row,
     state.mapNode.col,
-    (next) => advanceToNode(next)
+    (next) => onNodeSelected(next)
   );
-  wrap.appendChild(svg);
-
-  const legend = document.createElement("div");
-  legend.className = "map-legend";
-  legend.innerHTML =
-    "⚔️ Combat &nbsp; 💎 Treasure &nbsp; ❓ Event &nbsp; ⭐ Elite &nbsp; 👑 Boss";
-  wrap.appendChild(legend);
-
-  const hint = document.createElement("div");
-  hint.className = "map-hint";
-  hint.textContent = "Tap a glowing node to choose your path.";
-  wrap.appendChild(hint);
-
-  openModal({
-    title: "Choose your path",
-    bodyEl: wrap,
-    actions: [],
-  });
+  overworldMapEl.appendChild(svg);
+  if (overworldStatusEl) {
+    overworldStatusEl.textContent = `HP ${state.hp}/${effectiveMaxHp()} · 🪙 ${state.gold}`;
+  }
 }
 
-function advanceToNode(node) {
+function onNodeSelected(node) {
   state.mapNode = { row: node.row, col: node.col };
   state.level = node.row + 1;
   state.levelTicks = 0;
   state.terminusSpawned = false;
   state.terminusDefeated = false;
   state.entities = [];
-  closeModal();
+
+  // Different node types dispatch to different scenes.
+  if (node.type === "event") {
+    enterEventScene(rollEvent());
+    return;
+  }
+  if (node.type === "treasure") {
+    enterTreasureScene();
+    return;
+  }
+  // combat / elite / boss → live run.
+  enterRunScene();
+}
+
+function enterRunScene() {
+  setScene("run");
   state.paused = false;
+  state.running = true;
+  state.entities = [];
+  // Glowing Core mutation: heal a bit on level start.
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  if (mut.levelStartHeal > 0) {
+    state.hp = Math.min(effectiveMaxHp(), state.hp + mut.levelStartHeal);
+  }
   updatePauseBtn();
-  const cfg = NODE_TYPES[node.type] || NODE_TYPES.combat;
+  const node = currentMapNode();
+  const cfg = NODE_TYPES[node?.type] || NODE_TYPES.combat;
   showBanner(`— Level ${state.level}: ${cfg.label} —`, 1800);
   renderAll();
+}
+
+// ---------- Event scene ----------
+function enterEventScene(eventKey) {
+  const event = EVENTS[eventKey];
+  if (!event) {
+    // Fallback: skip to next scene as if it were combat.
+    enterRunScene();
+    return;
+  }
+  setScene("event");
+  state.paused = true;
+  state.running = false;
+  updatePauseBtn();
+  renderEventCard(event);
+  updateHUD();
+}
+
+function renderEventCard(event) {
+  eventTitleEl.textContent = event.title;
+  eventTextEl.textContent = event.text;
+  eventChoicesEl.innerHTML = "";
+  eventResultEl.classList.add("hidden");
+  eventResultEl.textContent = "";
+  eventContinueBtn.classList.add("hidden");
+
+  for (const choice of event.choices) {
+    const btn = document.createElement("button");
+    btn.className = "event-choice";
+    btn.type = "button";
+    btn.textContent = choice.label;
+    const allowed =
+      !choice.requires ||
+      (choice.requires.gold == null || state.gold >= choice.requires.gold);
+    if (!allowed) {
+      btn.disabled = true;
+      btn.classList.add("disabled");
+    }
+    btn.addEventListener("click", () => resolveEventChoice(event, choice));
+    eventChoicesEl.appendChild(btn);
+  }
+}
+
+function resolveEventChoice(event, choice) {
+  // Apply each effect in order.
+  for (const eff of choice.effects || []) {
+    if (eff.gold) {
+      if (eff.gold > 0) addGold(eff.gold);
+      else state.gold = Math.max(0, state.gold + eff.gold);
+    }
+    if (eff.hp) {
+      state.hp = clamp(state.hp + eff.hp, 0, effectiveMaxHp());
+    }
+    if (eff.heal) {
+      state.hp = Math.min(effectiveMaxHp(), state.hp + eff.heal);
+    }
+    if (eff.maxHp) {
+      state.maxHp = Math.max(1, state.maxHp + eff.maxHp);
+      state.hp = Math.min(state.hp, effectiveMaxHp());
+    }
+    if (eff.item) tryPickupItem(eff.item);
+    if (eff.randomItem) tryPickupItem(randomItemKey(eff.randomItem));
+    if (eff.mutation) {
+      // Award one random mutation directly (no choice screen here — events
+      // already involved a choice).
+      const owned = new Set(state.mutations);
+      const choices = rollMutationChoices(owned, 1);
+      if (choices.length > 0) addMutation(choices[0]);
+    }
+  }
+  // Show the result text and a continue button.
+  eventResultEl.textContent = choice.result || "";
+  eventResultEl.classList.remove("hidden");
+  for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
+  eventContinueBtn.classList.remove("hidden");
+  updateHUD();
+  renderInventory();
+
+  // Death check: an event might have killed the slime.
+  if (state.hp <= 0) {
+    state.hp = 0;
+    eventContinueBtn.textContent = "Continue (you collapse...)";
+    eventContinueBtn.onclick = () => onDeath();
+    return;
+  }
+  eventContinueBtn.textContent = "Continue ▶";
+  eventContinueBtn.onclick = () => {
+    // After resolving, go back to overworld so the player picks the next node.
+    openOverworld();
+  };
+}
+
+// ---------- Treasure scene (mutation pick) ----------
+function enterTreasureScene() {
+  setScene("event");
+  state.paused = true;
+  state.running = false;
+  updatePauseBtn();
+
+  const owned = new Set(state.mutations);
+  const choices = rollMutationChoices(owned, 3);
+
+  eventTitleEl.textContent = "💎 Mysterious Cache";
+  eventTextEl.textContent =
+    choices.length > 0
+      ? "A pulsing nodule sits on a stone pedestal. As you approach, three potential mutations bloom in your sight."
+      : "An empty pedestal — you've already mastered every mutation it offers.";
+  eventChoicesEl.innerHTML = "";
+  eventResultEl.classList.add("hidden");
+  eventContinueBtn.classList.add("hidden");
+
+  if (choices.length === 0) {
+    // Console it with gold.
+    addGold(25);
+    eventResultEl.textContent = "You take 25🪙 instead.";
+    eventResultEl.classList.remove("hidden");
+    eventContinueBtn.classList.remove("hidden");
+    eventContinueBtn.textContent = "Continue ▶";
+    eventContinueBtn.onclick = () => openOverworld();
+    updateHUD();
+    return;
+  }
+
+  for (const key of choices) {
+    const def = MUTATIONS[key];
+    const btn = document.createElement("button");
+    btn.className = "event-choice mutation-choice";
+    btn.type = "button";
+    btn.innerHTML = `<span class="mc-icon">${def.icon}</span><span class="mc-name">${def.name}</span><span class="mc-desc">${def.desc}</span>`;
+    btn.addEventListener("click", () => {
+      addMutation(key);
+      eventResultEl.textContent = `You absorb the ${def.name}.`;
+      eventResultEl.classList.remove("hidden");
+      for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
+      eventContinueBtn.classList.remove("hidden");
+      eventContinueBtn.textContent = "Continue ▶";
+      eventContinueBtn.onclick = () => openOverworld();
+      renderInventory();
+      updateHUD();
+    });
+    eventChoicesEl.appendChild(btn);
+  }
+  // Optional skip choice — take 15 gold instead.
+  const skip = document.createElement("button");
+  skip.className = "event-choice subtle";
+  skip.type = "button";
+  skip.textContent = "Skip — take 15🪙 instead";
+  skip.addEventListener("click", () => {
+    addGold(15);
+    eventResultEl.textContent = "You leave the pedestal undisturbed.";
+    eventResultEl.classList.remove("hidden");
+    for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
+    eventContinueBtn.classList.remove("hidden");
+    eventContinueBtn.textContent = "Continue ▶";
+    eventContinueBtn.onclick = () => openOverworld();
+    updateHUD();
+  });
+  eventChoicesEl.appendChild(skip);
+}
+
+function addMutation(key) {
+  if (!MUTATIONS[key] || state.mutations.includes(key)) return;
+  state.mutations.push(key);
+  refreshMutationBonuses();
+  pushLog(`Mutation: ${MUTATIONS[key].name}`);
+  // Refresh HP cap in case maxHp grew.
+  if (state.hp > effectiveMaxHp()) state.hp = effectiveMaxHp();
 }
 
 function onDeath() {
@@ -673,7 +938,9 @@ function onDeath() {
   openRunEndScreen(false);
 }
 
-function restartRun() {
+// Build a fresh run from current meta. Called by Hub "Begin Adventure" and
+// by dev tools "Reset Run". Leaves the game in the run scene at row 0.
+function beginNewRun() {
   runEndAwarded = false;
   // Recompute modifiers from current meta so purchases made mid-session
   // take effect on the next run.
@@ -699,7 +966,10 @@ function restartRun() {
   state.selected = null;
   state.buffs = {};
   state.regenCounter = 0;
+  state.passiveCounter = 0;
   state.growthLevel = 0;
+  state.mutations = [];
+  refreshMutationBonuses();
   state.runStats = {
     levelsCompleted: 0,
     enemiesDefeated: 0,
@@ -714,9 +984,32 @@ function restartRun() {
   state.map = generateRunMap();
   state.mapNode = { row: 0, col: 0 };
   closeModal();
+  setScene("run");
   updatePauseBtn();
   renderAll();
   showBanner("— Level 1: Start —");
+}
+
+// Legacy alias retained so dev tools and run-end keep working.
+function restartRun() {
+  beginNewRun();
+}
+
+// Return to the village hub. Used after run-end and from a future "give up"
+// button. Stops the tick loop by leaving scene !== "run".
+function goToHub() {
+  state.running = false;
+  state.paused = true;
+  setScene("hub");
+  closeModal();
+  renderHub();
+}
+
+function renderHub() {
+  const line = document.getElementById("hub-meta-line");
+  if (line && state.meta) {
+    line.textContent = `XP: ${state.meta.availableXp} · Lifetime: ${state.meta.totalXp}`;
+  }
 }
 
 // ---------- Inventory interactions (tap-to-select-then-place) ----------
@@ -892,28 +1185,19 @@ function openRunEndScreen(victory) {
     bodyEl: wrap,
     actions: [
       {
-        label: "Meta Progression",
-        onClick: () => {
-          closeModal();
-          openMetaMenu(() => openRunEndScreen(victory));
-        },
-      },
-      {
-        label: "New Run",
+        label: "Return to Hub",
         primary: true,
         onClick: () => {
           closeModal();
-          restartRun();
+          goToHub();
         },
       },
     ],
   });
 }
 
-function openMetaMenu(onClose) {
-  state.paused = true;
-  updatePauseBtn();
-
+function openMetaMenu() {
+  // Meta menu is now a hub-screen overlay. Caller should be in the hub scene.
   const wrap = document.createElement("div");
   wrap.className = "meta-menu";
 
@@ -983,8 +1267,9 @@ function openMetaMenu(onClose) {
         card.addEventListener("click", () => {
           if (purchase(state.meta, id)) {
             saveMeta(state.meta);
+            renderHub();
             // Re-render the menu in place.
-            openMetaMenu(onClose);
+            openMetaMenu();
           }
         });
       }
@@ -995,20 +1280,31 @@ function openMetaMenu(onClose) {
   }
 
   openModal({
-    title: "🧬 Meta Progression",
+    title: "🧪 Upgrade Lab",
     bodyEl: wrap,
+    actions: [
+      {
+        label: "Back to Hub",
+        primary: true,
+        onClick: () => {
+          closeModal();
+          renderHub();
+        },
+      },
+    ],
+  });
+}
+
+// Placeholder hub screens for not-yet-built buildings.
+function openPlaceholder(title, msg) {
+  openModal({
+    title,
+    body: msg,
     actions: [
       {
         label: "Back",
         primary: true,
-        onClick: () => {
-          closeModal();
-          if (onClose) onClose();
-          else {
-            state.paused = false;
-            updatePauseBtn();
-          }
-        },
+        onClick: () => closeModal(),
       },
     ],
   });
@@ -1083,12 +1379,32 @@ function renderPath() {
 }
 
 function renderInventory() {
+  renderMutationStrip();
   renderZone(heldZoneEl, state.heldSlots, "held");
   renderZone(stomachZoneEl, state.stomachSlots, "stomach");
   discardBtn.disabled = !state.selected;
   const cost = growCost();
   growBtn.textContent = `🧪 Grow (${cost}🪙)`;
   growBtn.disabled = state.gold < cost;
+}
+
+function renderMutationStrip() {
+  if (!mutationStripEl) return;
+  mutationStripEl.innerHTML = "";
+  if (!state.mutations || state.mutations.length === 0) {
+    mutationStripEl.classList.add("empty");
+    return;
+  }
+  mutationStripEl.classList.remove("empty");
+  for (const key of state.mutations) {
+    const def = MUTATIONS[key];
+    if (!def) continue;
+    const chip = document.createElement("div");
+    chip.className = "mut-chip";
+    chip.textContent = def.icon;
+    chip.title = `${def.name}\n${def.desc}`;
+    mutationStripEl.appendChild(chip);
+  }
 }
 
 function renderZone(zoneEl, slots, zone) {
@@ -1150,12 +1466,26 @@ function updatePauseBtn() {
 }
 
 // ---------- Input ----------
+function applyLaneRegen() {
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  if (mut.laneRegen > 0 && state.hp < effectiveMaxHp()) {
+    state.hp = Math.min(effectiveMaxHp(), state.hp + mut.laneRegen);
+    floatText("heal", `+${mut.laneRegen}`, slimeEl);
+    updateHUD();
+  }
+}
 function onLaneUp() {
+  if (state.scene !== "run") return;
+  const prev = state.lane;
   state.lane = clamp(state.lane - 1, 0, LANES - 1);
+  if (state.lane !== prev) applyLaneRegen();
   renderPath();
 }
 function onLaneDown() {
+  if (state.scene !== "run") return;
+  const prev = state.lane;
   state.lane = clamp(state.lane + 1, 0, LANES - 1);
+  if (state.lane !== prev) applyLaneRegen();
   renderPath();
 }
 function onPause() {
@@ -1181,11 +1511,60 @@ function hookInput() {
   });
 }
 
+// ---------- Hub wiring ----------
+function hookHub() {
+  const startBtn = document.getElementById("hub-start");
+  const upgradesBtn = document.getElementById("hub-upgrades");
+  const mutationsBtn = document.getElementById("hub-mutations");
+  const codexBtn = document.getElementById("hub-codex");
+  const cosmeticsBtn = document.getElementById("hub-cosmetics");
+  if (startBtn) startBtn.addEventListener("click", () => beginNewRun());
+  if (upgradesBtn) upgradesBtn.addEventListener("click", () => openMetaMenu());
+  if (mutationsBtn) {
+    mutationsBtn.addEventListener("click", () =>
+      openPlaceholder(
+        "🧬 Mutation Den",
+        "Future home of permanent mutation unlocks. Coming soon."
+      )
+    );
+  }
+  if (codexBtn) {
+    codexBtn.addEventListener("click", () =>
+      openPlaceholder(
+        "📖 Slime Codex",
+        "Lore, item entries, and bestiary. Coming soon."
+      )
+    );
+  }
+  if (cosmeticsBtn) {
+    cosmeticsBtn.addEventListener("click", () =>
+      openPlaceholder(
+        "🎨 Wardrobe",
+        "Skins and color variants. Coming soon."
+      )
+    );
+  }
+}
+
+// ---------- Event continue button ----------
+function hookEventView() {
+  if (eventContinueBtn) {
+    // The onclick handler is rebound per-event in resolveEventChoice; this
+    // line just exists so the button is registered in the DOM.
+  }
+}
+
 // ---------- Boot ----------
 function start() {
   hookInput();
+  hookHub();
+  hookEventView();
   state.meta = loadMeta();
-  restartRun();
+  refreshMutationBonuses();
+  // Boot lands in the hub — no run is in progress.
+  setScene("hub");
+  renderHub();
+  renderAll();
   setTickIntervalMs(state.tickInterval);
   initDevTools({
     state,
@@ -1201,7 +1580,7 @@ function start() {
     showBanner,
     onLevelComplete,
     spawnTerminus,
-    advanceToNode,
+    advanceToNode: onNodeSelected,
     rerollMap: () => {
       state.map = generateRunMap();
       state.mapNode = { row: 0, col: 0 };
@@ -1211,18 +1590,22 @@ function start() {
       state.terminusDefeated = false;
       state.entities = [];
       state.paused = false;
+      setScene("run");
       updatePauseBtn();
       renderAll();
       showBanner("— Level 1: Start —");
     },
     openMetaMenu,
+    goToHub,
     grantMetaXp: (amount) => {
       grantXp(state.meta, amount);
       saveMeta(state.meta);
+      renderHub();
     },
     resetMeta: () => {
       state.meta = resetMeta();
       saveMeta(state.meta);
+      renderHub();
     },
     COLS,
     levelTickLength,

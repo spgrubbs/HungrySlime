@@ -161,26 +161,34 @@ export function getNextNodes(map, row, col) {
 }
 
 // ---------- SVG renderer ----------
+// The map is drawn bottom-to-top: row 0 (start) is at the bottom of the SVG,
+// the boss row is at the top. Internally rows still ascend from start to boss,
+// we just flip Y at render time.
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_WIDTH = 280;
-const ROW_HEIGHT = 58;
-const NODE_RADIUS = 19;
+const ROW_HEIGHT = 64;
+const NODE_RADIUS = 22;
+const TOP_PAD = 10;
+const BOTTOM_PAD = 14;
 
 function nodeX(col, rowWidth) {
   return (VIEW_WIDTH / (rowWidth + 1)) * (col + 1);
 }
-function nodeY(row) {
-  return row * ROW_HEIGHT + NODE_RADIUS + 6;
+function nodeY(row, totalRows) {
+  // Flip: row 0 → bottom, last row → top.
+  const flipped = totalRows - 1 - row;
+  return TOP_PAD + flipped * ROW_HEIGHT + NODE_RADIUS;
 }
 
 export function renderMapSVG(map, currentRow, currentCol, onSelectNode) {
   const rows = map.length;
-  const height = rows * ROW_HEIGHT + 12;
+  const height = TOP_PAD + (rows - 1) * ROW_HEIGHT + NODE_RADIUS * 2 + BOTTOM_PAD;
 
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", `0 0 ${VIEW_WIDTH} ${height}`);
   svg.setAttribute("class", "map-svg");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
 
   const nextNodes = getNextNodes(map, currentRow, currentCol);
   const reachable = new Set(nextNodes.map((n) => `${n.row}:${n.col}`));
@@ -195,9 +203,9 @@ export function renderMapSVG(map, currentRow, currentCol, onSelectNode) {
         const target = map[r + 1][tCol];
         if (!target) continue;
         const x1 = nodeX(node.col, widthR);
-        const y1 = nodeY(r) + NODE_RADIUS - 2;
+        const y1 = nodeY(r, rows) - NODE_RADIUS + 2;
         const x2 = nodeX(tCol, widthN);
-        const y2 = nodeY(r + 1) - NODE_RADIUS + 2;
+        const y2 = nodeY(r + 1, rows) + NODE_RADIUS - 2;
         const isLive = r === currentRow && node.col === currentCol;
         const isPast = r < currentRow;
 
@@ -225,7 +233,7 @@ export function renderMapSVG(map, currentRow, currentCol, onSelectNode) {
       if (!node.active) continue;
       const cfg = NODE_TYPES[node.type] || NODE_TYPES.combat;
       const x = nodeX(node.col, widthR);
-      const y = nodeY(r);
+      const y = nodeY(r, rows);
 
       const isCurrent = r === currentRow && node.col === currentCol;
       const isReachable = reachable.has(`${r}:${node.col}`);
@@ -249,9 +257,19 @@ export function renderMapSVG(map, currentRow, currentCol, onSelectNode) {
       text.setAttribute("text-anchor", "middle");
       text.setAttribute("dominant-baseline", "central");
       text.setAttribute("y", "1");
-      text.setAttribute("font-size", "20");
+      text.setAttribute("font-size", "22");
       text.textContent = cfg.emoji;
       g.appendChild(text);
+
+      if (isCurrent) {
+        // Tiny slime marker so player can see "you are here".
+        const marker = document.createElementNS(SVG_NS, "text");
+        marker.setAttribute("text-anchor", "middle");
+        marker.setAttribute("y", NODE_RADIUS + 14);
+        marker.setAttribute("font-size", "16");
+        marker.textContent = "🟢";
+        g.appendChild(marker);
+      }
 
       if (isReachable && onSelectNode) {
         g.addEventListener("click", () => onSelectNode(node));
