@@ -31,6 +31,7 @@ import {
 import { EVENTS, rollEvent } from "./events.js";
 import {
   MUTATIONS,
+  STOMACH_KINDS,
   rollMutationChoices,
   getMutationBonuses,
 } from "./mutations.js";
@@ -64,11 +65,16 @@ const state = {
   mapNode: { row: 0, col: 0 },
   // Path entities: keyed by id, each has {id,type,def,lane,col,hp,maxHp}
   entities: [],
-  // Inventory: flat arrays of slots; each slot is null or item instance
-  heldSlots: [null, null, null, null], // 4 held slots
-  stomachSlots: [null, null], // 2 stomach slots
-  // Each item instance shape: {key, def, digestProgress}
-  selected: null, // {zone: "held"|"stomach", index: number}
+  // Inventory: a single flat array of cells. Each cell has a stomach kind
+  // (see STOMACH_KINDS) and may hold one item instance.
+  // Items enter at index 0 and cascade toward the end as new items push them.
+  // Cell shape: { kind: "none"|"digest"|"fast"|"acid"|"holding", item: instance|null }
+  // Item instance shape: { key, def, digestProgress }
+  inventory: [],
+  // selected = { index: number } when something is picked up. arrangeMode
+  // toggles whether the next click swaps items or swaps entire cells.
+  selected: null,
+  arrangeMode: false,
   buffs: {}, // name -> remaining ticks
   regenCounter: 0,
   passiveCounter: 0, // separate counter for mutation passive regen
@@ -147,8 +153,8 @@ const $ = (id) => document.getElementById(id);
 const path = $("path");
 const laneGrid = $("lane-grid");
 const slimeEl = $("slime");
-const heldZoneEl = $("held-zone");
-const stomachZoneEl = $("stomach-zone");
+const inventoryZoneEl = $("inventory-zone");
+const arrangeBtn = $("arrange-btn");
 const hpEl = $("hp");
 const goldEl = $("gold");
 const atkEl = $("atk");
@@ -224,37 +230,72 @@ function randomItemKey(rarity = null) {
 }
 
 // ---------- Inventory ----------
-function firstEmpty(slots) {
-  return slots.findIndex((s) => s === null);
+// Build a fresh inventory of `size` cells. The last cell is a default
+// digestive sac; all earlier cells are inert. Used at run start.
+function makeFreshInventory(size) {
+  const cells = [];
+  for (let i = 0; i < size; i++) {
+    cells.push({ kind: "none", item: null });
+  }
+  if (cells.length > 0) {
+    cells[cells.length - 1].kind = "digest";
+  }
+  return cells;
+}
+
+// Insert an item instance into the inventory. Cascade-pushes existing items
+// forward, bypassing occupied "holding" cells (their items don't get pushed).
+// Returns true if the item found a home, false if everything was full and it
+// fell out the back.
+function pushIntoInventory(itemInstance) {
+  let cur = itemInstance;
+  for (let i = 0; i < state.inventory.length && cur; i++) {
+    const cell = state.inventory[i];
+    const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+    // Holding cells with an item already present are transparent — skip them
+    // entirely so the moving item passes by.
+    if (kindCfg.holds && cell.item) continue;
+    if (!cell.item) {
+      cell.item = cur;
+      // Reset digest progress on entry so partial digestion doesn't leak in.
+      cur.digestProgress = 0;
+      cur = null;
+    } else {
+      // Swap: place new item, displace existing into `cur` to keep cascading.
+      const prev = cell.item;
+      cell.item = cur;
+      cur.digestProgress = 0;
+      cur = prev;
+    }
+  }
+  return cur === null;
 }
 
 function tryPickupItem(key) {
-  // First try held zone, overflow to stomach
-  let idx = firstEmpty(state.heldSlots);
-  if (idx >= 0) {
-    state.heldSlots[idx] = makeItemInstance(key);
+  const inst = makeItemInstance(key);
+  if (!inst) return false;
+  if (pushIntoInventory(inst)) {
     pushLog(`Picked up ${ITEMS[key].name}`);
-    return true;
-  }
-  idx = firstEmpty(state.stomachSlots);
-  if (idx >= 0) {
-    state.stomachSlots[idx] = makeItemInstance(key);
-    pushLog(`${ITEMS[key].name} → stomach (overflow)`);
     return true;
   }
   pushLog(`${ITEMS[key].name} lost (full)`);
   return false;
 }
 
+// Iterate the inventory and collect "held" bonuses. Only items in cells with
+// a holding-kind stomach are considered; items in inert/digesting cells are
+// inert too (they're just in transit).
 function getHeldBonuses() {
   let attack = 1;
   let damageReduction = 0;
   let maxHpBonus = 0;
   let regen = 0;
   let regenInterval = 5;
-  for (const slot of state.heldSlots) {
-    if (!slot || !slot.def.held) continue;
-    const h = slot.def.held;
+  for (const cell of state.inventory) {
+    if (!cell.item || !cell.item.def.held) continue;
+    const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+    if (!kindCfg.holds) continue;
+    const h = cell.item.def.held;
     if (h.attack) attack += h.attack;
     if (h.damageReduction) damageReduction += h.damageReduction;
     if (h.maxHpBonus) maxHpBonus += h.maxHpBonus;
@@ -275,7 +316,7 @@ function addGold(amount) {
   state.runStats.goldEarned += amount;
 }
 
-function applyDigest(item) {
+function applyDigest(item, yieldMult = 1) {
   const d = item.def.digest || {};
   state.runStats.itemsDigested++;
   // Hungry Void mutation: every digestion heals a flat amount.
@@ -284,15 +325,18 @@ function applyDigest(item) {
     state.hp = Math.min(effectiveMaxHp(), state.hp + mut.digestHeal);
     floatText("heal", `+${mut.digestHeal}`, slimeEl);
   }
-  if (d.heal) {
-    state.hp = Math.min(effectiveMaxHp(), state.hp + d.heal);
-    pushLog(`Digested ${item.def.name}: +${d.heal} HP`);
-    floatText("heal", `+${d.heal}`, slimeEl);
+  // Numeric yields scale with the cell's yieldMult (acid sac etc).
+  const scaledHeal = Math.round((d.heal || 0) * yieldMult);
+  const scaledGold = Math.round((d.gold || 0) * yieldMult);
+  if (scaledHeal > 0) {
+    state.hp = Math.min(effectiveMaxHp(), state.hp + scaledHeal);
+    pushLog(`Digested ${item.def.name}: +${scaledHeal} HP`);
+    floatText("heal", `+${scaledHeal}`, slimeEl);
   }
-  if (d.gold) {
-    addGold(d.gold);
-    pushLog(`Digested ${item.def.name}: +${d.gold} 🪙`);
-    floatText("gold", `+${d.gold}`, slimeEl);
+  if (scaledGold > 0) {
+    addGold(scaledGold);
+    pushLog(`Digested ${item.def.name}: +${scaledGold} 🪙`);
+    floatText("gold", `+${scaledGold}`, slimeEl);
   }
   if (d.permMaxHp) {
     state.maxHp += d.permMaxHp;
@@ -304,11 +348,13 @@ function applyDigest(item) {
     pushLog(`Gained buff: ${d.buff}`);
   }
   if (d.enemyDamage) {
+    // Enemies now stop one column to the right of the slime, so the bomb
+    // looks one cell ahead instead of on top of the slime.
     const target = state.entities.find(
       (e) =>
         (e.type === "enemy" || e.type === "terminus") &&
         e.lane === state.lane &&
-        e.col === SLIME_COL + 1 // enemy bumping into slime
+        e.col === SLIME_COL + 1
     );
     if (target) {
       target.hp -= d.enemyDamage;
@@ -370,7 +416,12 @@ function spawnRandomPathEntity() {
       col
     );
   } else if ((roll -= w.obstacle) < 0) {
-    const obs = Math.random() < 0.7 ? OBSTACLES.rock : OBSTACLES.spikes;
+    // 60% rock, 25% spikes, 15% boulder.
+    const r = Math.random();
+    let obs;
+    if (r < 0.6) obs = OBSTACLES.rock;
+    else if (r < 0.85) obs = OBSTACLES.spikes;
+    else obs = OBSTACLES.boulder;
     spawnEntity(obs, "obstacle", lane, col);
   } else {
     spawnEntity(LOCATIONS.fountain, "location", lane, col);
@@ -436,60 +487,76 @@ function tick() {
     if (state.buffs[name] <= 0) delete state.buffs[name];
   }
 
-  // 3. Advance digestion for stomach items (quickDigest upgrade + Iron Stomach mutation).
-  const digestStep =
+  // 3. Advance digestion across the unified inventory. Only cells whose kind
+  //    has digests=true tick down their item's digestion timer; inert/holding
+  //    cells leave their items alone. Each cell's speedMult and yieldMult come
+  //    from STOMACH_KINDS and stack with global modifiers.
+  const baseDigestStep =
     (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1);
-  for (let i = 0; i < state.stomachSlots.length; i++) {
-    const item = state.stomachSlots[i];
-    if (!item) continue;
-    item.digestProgress += digestStep;
-    if (item.digestProgress >= item.def.digestTime) {
-      applyDigest(item);
-      state.stomachSlots[i] = null;
+  for (let i = 0; i < state.inventory.length; i++) {
+    const cell = state.inventory[i];
+    if (!cell.item) continue;
+    const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+    if (!kindCfg.digests) continue;
+    cell.item.digestProgress += baseDigestStep * (kindCfg.speedMult || 1);
+    if (cell.item.digestProgress >= cell.item.def.digestTime) {
+      applyDigest(cell.item, kindCfg.yieldMult || 1);
+      cell.item = null;
     }
   }
 
-  // 4. Move entities. Entities stop at slime's column + 1 if slime is in their lane
-  //    (they get "stuck" bumping the slime). Enemies deal damage when adjacent.
-  //    Combat: when enemy.col == SLIME_COL && same lane, combat each tick.
-  //    Simpler rule: an entity can't move onto the slime's cell. It stops at col 1
-  //    if slime is in its lane, then on next tick when slime occupies, bump combat.
-  // For now, treat the slime's cell itself as the combat cell.
+  // 4. Move entities. Movement is one column to the left per tick (some enemies
+  //    are slowed). Special collision rules:
+  //    - Enemies and "blocking" obstacles (boulders) refuse to enter the slime's
+  //      cell when the slime is in their lane: they stop one column away and
+  //      keep attacking / barricading from there. Items can pile up behind them.
+  //    - Items / locations / regular obstacles trigger interaction the moment
+  //      they slide onto the slime's cell.
+  //    - When two entities collide mid-path, items/obstacles sliding into a
+  //      stuck enemy interact with it (obstacles damage, fountains heal),
+  //      otherwise the moving entity just stalls a tick.
 
-  // Sort entities by col ascending so leftmost moves first (no collisions)
+  // Sort entities by col ascending so the leftmost moves first to avoid races.
   const sorted = [...state.entities].sort((a, b) => a.col - b.col);
   for (const ent of sorted) {
-    // Speed: some enemies act every 2 ticks
+    // Speed: some enemies act every N ticks
     const speed = ent.def.speed || 1;
     if (speed > 1 && state.tick % speed !== 0) continue;
 
-    // Slow enemies don't move on alternate ticks (already skipped above)
     const nextCol = ent.col - 1;
 
     if (nextCol < 0) {
       // Despawned off the left edge
-      if (ent.type === "enemy" || ent.type === "terminus") {
-        // Shouldn't happen — enemies bump combat first
-      }
       removeEntity(ent);
       continue;
     }
 
-    // Would the move land on the slime's cell (combat trigger)?
+    // Slime in the way? (next col is slime cell in slime's lane)
     if (nextCol === SLIME_COL && ent.lane === state.lane) {
-      // Trigger encounter based on type
+      const isBlocker =
+        ent.type === "enemy" ||
+        ent.type === "terminus" ||
+        (ent.type === "obstacle" && ent.def.blocking);
+      if (isBlocker) {
+        // Refuse to advance; stay at current col bumping the slime.
+        continue;
+      }
+      // Items / locations / non-blocking obstacles slide onto the slime cell
+      // and interact immediately.
       handleEncounter(ent);
       continue;
     }
 
-    // Would it land on another entity? Skip move.
-    if (state.entities.some((e) => e !== ent && e.lane === ent.lane && e.col === nextCol)) {
+    // Another entity already in nextCol?
+    const blocker = state.entities.find(
+      (e) => e !== ent && e.lane === ent.lane && e.col === nextCol
+    );
+    if (blocker) {
+      handleSlideInteraction(ent, blocker);
       continue;
     }
 
     ent.col = nextCol;
-
-    // Slime not in this lane: entities in col 0 just despawn next tick
   }
 
   // 4b. Magnetic Body / Magnetic Membrane: vacuum items from adjacent lanes.
@@ -506,16 +573,15 @@ function tick() {
     }
   }
 
-  // 5. Combat continues for enemies still sharing slime's cell (multi-tick combat)
-  //    (handled inside handleEncounter for newly arrived, but we also need
-  //    ongoing bump combat for enemies already adjacent.)
-  const stuckEnemies = state.entities.filter(
+  // 5. Combat happens for any enemy adjacent to the slime (one cell ahead in
+  //    the slime's lane). Enemies that survive remain there next tick.
+  const adjacentEnemies = state.entities.filter(
     (e) =>
       (e.type === "enemy" || e.type === "terminus") &&
       e.lane === state.lane &&
-      e.col === SLIME_COL
+      e.col === SLIME_COL + 1
   );
-  for (const enemy of stuckEnemies) {
+  for (const enemy of adjacentEnemies) {
     resolveCombatRound(enemy);
     if (state.hp <= 0 || !state.running) break;
   }
@@ -555,29 +621,89 @@ function tick() {
 }
 
 // ---------- Encounters ----------
+// Apply damage from an obstacle to the slime, taking held / mutation
+// reductions and god-mode into account.
+function applyObstacleDamageToSlime(ent) {
+  const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  const reduction =
+    getHeldBonuses().damageReduction + (mut.damageReduction || 0);
+  const rawDmg = Math.max(0, (ent.def.damage || 0) - reduction);
+  const dmg = devState.godMode ? 0 : rawDmg;
+  state.hp -= dmg;
+  pushLog(`${ent.def.name} hits you for ${dmg}`);
+  if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
+  return dmg;
+}
+
+// The slime "encounters" an entity that is now in its cell. Could be from the
+// move loop (the entity slid in) or from a lane change (the slime walked onto
+// it). Triggers the appropriate interaction.
 function handleEncounter(ent) {
   if (ent.type === "enemy" || ent.type === "terminus") {
-    // Move onto slime cell; combat is resolved in the stuckEnemies loop below
-    // so that newly-arrived and already-adjacent enemies get exactly one round.
-    ent.col = SLIME_COL;
+    // Slime walked into a stray enemy at col 0. Run a single combat round and
+    // bump any survivor back to col 1 so the normal adjacent-combat rules
+    // take over from the next tick.
+    resolveCombatRound(ent);
+    if (state.entities.includes(ent)) {
+      ent.col = SLIME_COL + 1;
+    }
   } else if (ent.type === "item") {
     tryPickupItem(ent.def.itemKey);
     removeEntity(ent);
   } else if (ent.type === "obstacle") {
-    const mut = state.mutBonuses || getMutationBonuses(state.mutations);
-    const reduction =
-      getHeldBonuses().damageReduction + (mut.damageReduction || 0);
-    const rawDmg = Math.max(0, ent.def.damage - reduction);
-    const dmg = devState.godMode ? 0 : rawDmg;
-    state.hp -= dmg;
-    pushLog(`${ent.def.name} hits you for ${dmg}`);
-    if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
-    removeEntity(ent);
+    if (ent.def.blocking) {
+      // Walked into a boulder. It hits the slime once and the slime's
+      // movement stopper kicks in: the boulder gets bumped one column back so
+      // it stays a barrier in this lane.
+      applyObstacleDamageToSlime(ent);
+      ent.col = SLIME_COL + 1;
+    } else {
+      applyObstacleDamageToSlime(ent);
+      removeEntity(ent);
+    }
   } else if (ent.type === "location") {
     // Move onto location and open modal
     ent.col = SLIME_COL;
     openLocation(ent);
   }
+}
+
+// Two entities collide in the middle of the path (one moving onto another).
+// `mover` is the one trying to advance; `blocker` is the one already at that
+// cell. Most pairings just stall, but obstacles damage stuck enemies and
+// fountains heal them, which is what allows piles of debris to wear bosses
+// down.
+function handleSlideInteraction(mover, blocker) {
+  const blockerIsEnemy =
+    blocker.type === "enemy" || blocker.type === "terminus";
+
+  if (blockerIsEnemy && mover.type === "obstacle") {
+    const dmg = mover.def.damage || 0;
+    blocker.hp -= dmg;
+    pushLog(`${mover.def.name} slams ${blocker.def.name} for ${dmg}`);
+    removeEntity(mover);
+    if (blocker.hp <= 0) {
+      state.runStats.enemiesDefeated++;
+      const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+      const goldDrop = Math.round(
+        (blocker.def.gold || 0) * (mut.enemyGoldMult || 1)
+      );
+      addGold(goldDrop);
+      pushLog(`${blocker.def.name} crushed (+${goldDrop}🪙)`);
+      removeEntity(blocker);
+    }
+    return;
+  }
+
+  if (blockerIsEnemy && mover.type === "location" && mover.def.id === "fountain") {
+    const heal = 5 + state.level * 2;
+    blocker.hp = Math.min(blocker.maxHp, blocker.hp + heal);
+    pushLog(`${blocker.def.name} drinks from the ${mover.def.name} (+${heal})`);
+    removeEntity(mover);
+    return;
+  }
+
+  // Default: just don't move this tick.
 }
 
 function resolveCombatRound(enemy) {
@@ -931,6 +1057,15 @@ function addMutation(key) {
   pushLog(`Mutation: ${MUTATIONS[key].name}`);
   // Refresh HP cap in case maxHp grew.
   if (state.hp > effectiveMaxHp()) state.hp = effectiveMaxHp();
+
+  // Stomach-granting mutations: append a new typed cell to the inventory.
+  // The player can move it around with arrange mode.
+  const def = MUTATIONS[key];
+  const stomachKind = def.effect && def.effect.addStomach;
+  if (stomachKind && STOMACH_KINDS[stomachKind]) {
+    state.inventory.push({ kind: stomachKind, item: null });
+    pushLog(`Grew a ${STOMACH_KINDS[stomachKind].label}`);
+  }
 }
 
 function onDeath() {
@@ -961,9 +1096,14 @@ function beginNewRun() {
   state.terminusSpawned = false;
   state.terminusDefeated = false;
   state.entities = [];
-  state.heldSlots = new Array(4 + (mods.heldCells || 0)).fill(null);
-  state.stomachSlots = new Array(2 + (mods.stomachCells || 0)).fill(null);
+  // Unified inventory: 6 default cells + any extras granted by meta upgrades.
+  // The last cell is a digestive sac; everything else is inert until a player
+  // mutation adds a typed stomach. Held/Stomach meta upgrades both contribute
+  // generic extra cells now that the two zones are unified.
+  const baseInventorySize = 6 + (mods.heldCells || 0) + (mods.stomachCells || 0);
+  state.inventory = makeFreshInventory(baseInventorySize);
   state.selected = null;
+  state.arrangeMode = false;
   state.buffs = {};
   state.regenCounter = 0;
   state.passiveCounter = 0;
@@ -1013,31 +1153,49 @@ function renderHub() {
 }
 
 // ---------- Inventory interactions (tap-to-select-then-place) ----------
-function onSlotClick(zone, index) {
-  const slots = zone === "held" ? state.heldSlots : state.stomachSlots;
+// Two interaction modes share the same selection state:
+//   default → tap any cell with an item to select it, tap another cell to
+//             swap items only (cell kinds stay put).
+//   arrange → tap any cell to select it, tap another to swap the entire cell
+//             (kind + item). Lets the player reposition stomachs they earned.
+function onSlotClick(index) {
+  const cell = state.inventory[index];
+  if (!cell) return;
 
-  if (!state.selected) {
-    // Need an item to select
-    if (slots[index]) {
-      state.selected = { zone, index };
-    }
-  } else {
-    // Place/swap from selected to this slot
-    const src = state.selected;
-    const srcSlots =
-      src.zone === "held" ? state.heldSlots : state.stomachSlots;
-    const dstSlots = slots;
-    if (src.zone === zone && src.index === index) {
-      // Deselect
+  if (state.arrangeMode) {
+    if (!state.selected) {
+      state.selected = { index };
+    } else if (state.selected.index === index) {
       state.selected = null;
     } else {
-      const tmp = dstSlots[index];
-      dstSlots[index] = srcSlots[src.index];
-      srcSlots[src.index] = tmp;
-      // If moved INTO stomach from held, digestion progress restarts
-      if (zone === "stomach" && dstSlots[index]) {
-        dstSlots[index].digestProgress = 0;
-      }
+      const a = state.inventory[state.selected.index];
+      const b = cell;
+      // Swap the entire cell descriptor (kind + item).
+      state.inventory[state.selected.index] = b;
+      state.inventory[index] = a;
+      state.selected = null;
+    }
+    renderInventory();
+    updateHUD();
+    return;
+  }
+
+  // Default mode: swap items between cells.
+  if (!state.selected) {
+    if (cell.item) state.selected = { index };
+  } else {
+    const src = state.inventory[state.selected.index];
+    if (state.selected.index === index) {
+      state.selected = null;
+    } else {
+      const tmp = cell.item;
+      cell.item = src.item;
+      src.item = tmp;
+      // Reset digest progress on items that just entered a digesting cell.
+      const dstKind = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+      const srcKind = STOMACH_KINDS[src.kind] || STOMACH_KINDS.none;
+      if (dstKind.digests && cell.item) cell.item.digestProgress = 0;
+      if (srcKind.digests && src.item) src.item.digestProgress = 0;
       state.selected = null;
     }
   }
@@ -1047,14 +1205,20 @@ function onSlotClick(zone, index) {
 
 function discardSelected() {
   if (!state.selected) return;
-  const slots =
-    state.selected.zone === "held" ? state.heldSlots : state.stomachSlots;
-  const item = slots[state.selected.index];
-  if (item) pushLog(`Discarded ${item.def.name}`);
-  slots[state.selected.index] = null;
+  const cell = state.inventory[state.selected.index];
+  if (cell && cell.item) {
+    pushLog(`Discarded ${cell.item.def.name}`);
+    cell.item = null;
+  }
   state.selected = null;
   renderInventory();
   updateHUD();
+}
+
+function toggleArrangeMode() {
+  state.arrangeMode = !state.arrangeMode;
+  state.selected = null;
+  renderInventory();
 }
 
 function growCost() {
@@ -1070,51 +1234,17 @@ function growSlime() {
     pushLog(`Need ${cost}🪙 to grow`);
     return;
   }
-  if (state.heldSlots.length + state.stomachSlots.length >= 24) {
+  if (state.inventory.length >= 24) {
     pushLog("Max size reached");
     return;
   }
-  state.paused = true;
-  updatePauseBtn();
-  openModal({
-    title: "🧪 Grow",
-    body: `Spend ${cost}🪙 to add one cell. Choose where:`,
-    actions: [
-      {
-        label: "+1 Held cell",
-        primary: true,
-        onClick: () => {
-          state.gold -= cost;
-          state.heldSlots.push(null);
-          state.growthLevel++;
-          closeModal();
-          state.paused = false;
-          updatePauseBtn();
-          renderAll();
-        },
-      },
-      {
-        label: "+1 Stomach cell",
-        onClick: () => {
-          state.gold -= cost;
-          state.stomachSlots.push(null);
-          state.growthLevel++;
-          closeModal();
-          state.paused = false;
-          updatePauseBtn();
-          renderAll();
-        },
-      },
-      {
-        label: "Cancel",
-        onClick: () => {
-          closeModal();
-          state.paused = false;
-          updatePauseBtn();
-        },
-      },
-    ],
-  });
+  // Growth just adds an inert cell. Players use mutations to add stomachs
+  // and arrange-mode to place them where they want.
+  state.gold -= cost;
+  state.inventory.push({ kind: "none", item: null });
+  state.growthLevel++;
+  pushLog("Slime grows: +1 cell");
+  renderAll();
 }
 
 // ---------- Run end + meta menu ----------
@@ -1380,12 +1510,18 @@ function renderPath() {
 
 function renderInventory() {
   renderMutationStrip();
-  renderZone(heldZoneEl, state.heldSlots, "held");
-  renderZone(stomachZoneEl, state.stomachSlots, "stomach");
-  discardBtn.disabled = !state.selected;
+  renderInventoryZone();
+  discardBtn.disabled =
+    !state.selected ||
+    !state.inventory[state.selected.index] ||
+    !state.inventory[state.selected.index].item;
   const cost = growCost();
   growBtn.textContent = `🧪 Grow (${cost}🪙)`;
   growBtn.disabled = state.gold < cost;
+  if (arrangeBtn) {
+    arrangeBtn.classList.toggle("on", state.arrangeMode);
+    arrangeBtn.textContent = state.arrangeMode ? "🔁 Arranging" : "🔁 Arrange";
+  }
 }
 
 function renderMutationStrip() {
@@ -1407,38 +1543,63 @@ function renderMutationStrip() {
   }
 }
 
-function renderZone(zoneEl, slots, zone) {
-  zoneEl.innerHTML = "";
-  slots.forEach((item, idx) => {
-    const slot = document.createElement("div");
-    slot.className = "slot";
-    if (!item) slot.classList.add("empty");
-    if (
-      state.selected &&
-      state.selected.zone === zone &&
-      state.selected.index === idx
-    )
-      slot.classList.add("selected");
-    if (state.selected && !item) slot.classList.add("valid-target");
+function renderInventoryZone() {
+  if (!inventoryZoneEl) return;
+  inventoryZoneEl.innerHTML = "";
+  inventoryZoneEl.classList.toggle("arrange-mode", state.arrangeMode);
 
-    if (item) {
-      slot.textContent = item.def.emoji;
+  state.inventory.forEach((cell, idx) => {
+    const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+    const slot = document.createElement("div");
+    slot.className = `slot kind-${cell.kind}`;
+    slot.style.background = kindCfg.color;
+    slot.style.borderColor = kindCfg.border;
+    if (!cell.item) slot.classList.add("empty");
+    if (state.selected && state.selected.index === idx) {
+      slot.classList.add("selected");
+    }
+    // Highlight valid drop targets in default mode (any cell), arrange mode
+    // (any cell), so the user always sees clickable targets when something
+    // is selected.
+    if (state.selected && state.selected.index !== idx) {
+      slot.classList.add("valid-target");
+    }
+
+    // Stomach kind label/icon shown faintly behind the item.
+    const kindBadge = document.createElement("div");
+    kindBadge.className = "kind-badge";
+    kindBadge.textContent = kindCfg.icon;
+    kindBadge.title = `${kindCfg.label} — ${kindCfg.desc}`;
+    slot.appendChild(kindBadge);
+
+    if (cell.item) {
+      const item = cell.item;
+      const itemEl = document.createElement("div");
+      itemEl.className = "slot-item";
+      itemEl.textContent = item.def.emoji;
+      slot.appendChild(itemEl);
+
       const r = document.createElement("span");
       r.className = `rarity ${item.def.rarity}`;
       r.textContent = item.def.rarity.charAt(0).toUpperCase();
       slot.appendChild(r);
 
-      if (zone === "stomach") {
+      if (kindCfg.digests) {
         const ring = document.createElement("div");
         ring.className = "digest-ring";
-        const pct = Math.min(100, (item.digestProgress / item.def.digestTime) * 100);
+        const pct = Math.min(
+          100,
+          (item.digestProgress / item.def.digestTime) * 100
+        );
         ring.style.background = `conic-gradient(#9f6 ${pct}%, transparent ${pct}%)`;
         slot.appendChild(ring);
       }
-      slot.title = `${item.def.name}\n${item.def.flavor}`;
+      slot.title = `${item.def.name} (${kindCfg.label})\n${item.def.flavor}`;
+    } else {
+      slot.title = kindCfg.label + " — " + kindCfg.desc;
     }
-    slot.addEventListener("click", () => onSlotClick(zone, idx));
-    zoneEl.appendChild(slot);
+    slot.addEventListener("click", () => onSlotClick(idx));
+    inventoryZoneEl.appendChild(slot);
   });
 }
 
@@ -1474,19 +1635,34 @@ function applyLaneRegen() {
     updateHUD();
   }
 }
+// Whenever the slime changes lane, anything sitting in its column in the new
+// lane gets walked-on. The encounter triggers immediately — items get picked
+// up, fountains open, obstacles damage, lone enemies start a combat round.
+function checkLaneEntry() {
+  const ent = state.entities.find(
+    (e) => e.lane === state.lane && e.col === SLIME_COL
+  );
+  if (ent) handleEncounter(ent);
+}
 function onLaneUp() {
   if (state.scene !== "run") return;
   const prev = state.lane;
   state.lane = clamp(state.lane - 1, 0, LANES - 1);
-  if (state.lane !== prev) applyLaneRegen();
-  renderPath();
+  if (state.lane !== prev) {
+    applyLaneRegen();
+    checkLaneEntry();
+  }
+  renderAll();
 }
 function onLaneDown() {
   if (state.scene !== "run") return;
   const prev = state.lane;
   state.lane = clamp(state.lane + 1, 0, LANES - 1);
-  if (state.lane !== prev) applyLaneRegen();
-  renderPath();
+  if (state.lane !== prev) {
+    applyLaneRegen();
+    checkLaneEntry();
+  }
+  renderAll();
 }
 function onPause() {
   if (!state.running) return;
@@ -1500,6 +1676,7 @@ function hookInput() {
   pauseBtn.addEventListener("click", onPause);
   growBtn.addEventListener("click", growSlime);
   discardBtn.addEventListener("click", discardSelected);
+  if (arrangeBtn) arrangeBtn.addEventListener("click", toggleArrangeMode);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp" || e.key === "w") onLaneUp();

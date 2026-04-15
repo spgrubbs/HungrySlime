@@ -184,16 +184,17 @@ body {
 
 .inv-zone {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
   padding: 6px;
-  background: #1a2140;
+  background: #0f1426;
   border: 1px solid #2a3356;
   border-radius: 8px;
+  position: relative;
 }
-.inv-zone.stomach {
-  background: #22163a;
-  border-color: #402a56;
+.inv-zone.arrange-mode {
+  border-color: #ffd84d;
+  box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.25);
 }
 
 .slot {
@@ -205,26 +206,54 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(20px, 5.5vw, 28px);
+  font-size: clamp(18px, 5vw, 24px);
   cursor: pointer;
   transition: transform 0.08s, border-color 0.15s, background 0.15s;
+  overflow: hidden;
 }
 .slot:active {
   transform: scale(0.96);
 }
-.slot.empty {
-  color: transparent;
+.slot.empty .slot-item {
+  display: none;
 }
-.inv-zone.stomach .slot {
-  background: #160b28;
-  border-color: #3a2452;
+
+/* Stomach kind badge sits behind the item, faint by default. */
+.slot .kind-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
 }
+.slot.empty .kind-badge {
+  opacity: 0.85;
+}
+.slot .slot-item {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+/* Stomach kind ring — tints the border so the inventory reads as a row of
+ * specialized organs at a glance. The inline style on the element supplies
+ * the actual color, but these rules add subtle decoration. */
+.slot.kind-digest { box-shadow: inset 0 0 0 1px rgba(160, 100, 220, 0.4); }
+.slot.kind-fast { box-shadow: inset 0 0 0 1px rgba(255, 200, 90, 0.4); }
+.slot.kind-acid { box-shadow: inset 0 0 0 1px rgba(120, 220, 120, 0.4); }
+.slot.kind-holding { box-shadow: inset 0 0 0 1px rgba(255, 200, 90, 0.5); }
+
 .slot.selected {
-  border-color: #ffd84d;
+  border-color: #ffd84d !important;
   box-shadow: 0 0 0 2px rgba(255, 216, 77, 0.45);
 }
-.slot.valid-target {
-  border-color: #6cf;
+.inv-zone.arrange-mode .slot.valid-target {
+  border-color: #ffd84d !important;
+  opacity: 0.85;
 }
 
 .slot .digest-ring {
@@ -234,6 +263,7 @@ body {
   background: conic-gradient(#9f6 0%, transparent 0%);
   opacity: 0.45;
   pointer-events: none;
+  z-index: 1;
 }
 
 .slot .rarity {
@@ -272,6 +302,11 @@ body {
 }
 .inv-btn:active:not(:disabled) {
   transform: translateY(1px);
+}
+.inv-btn.on {
+  background: #ffd84d;
+  color: #1a1306;
+  border-color: #e0b62a;
 }
 .inv-hint {
   font-size: 10px;

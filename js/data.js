@@ -164,10 +164,23 @@ export const TERMINI = {
   5: { id: "t5", name: "Gelatinous King", emoji: "👑", hp: 100, attack: 7, speed: 1, gold: 100, dropChance: 1, dropPool: ["bomb"] },
 };
 
-/** Obstacles */
+/** Obstacles
+ *  blocking=true means the obstacle stops at the column adjacent to the slime
+ *  instead of entering the slime cell. The slime must lane-change to bypass it.
+ *  Non-blocking obstacles damage the slime on contact and despawn. Blocking
+ *  obstacles can be hit by other entities sliding into them (item piles, etc).
+ */
 export const OBSTACLES = {
   rock: { id: "rock", name: "Rock", emoji: "🪨", damage: 3, cost: 1 },
   spikes: { id: "spikes", name: "Spikes", emoji: "⚡", damage: 5, cost: 2 },
+  boulder: {
+    id: "boulder",
+    name: "Boulder",
+    emoji: "⛰️",
+    damage: 8,
+    blocking: true,
+    cost: 3,
+  },
 };
 
 /** Locations */
