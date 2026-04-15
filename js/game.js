@@ -14,6 +14,19 @@ import {
 } from "./data.js";
 import { initDevTools } from "./devtools.js";
 import { generateRunMap, renderMapSVG, NODE_TYPES } from "./map.js";
+import {
+  UPGRADES,
+  TIER_THRESHOLDS,
+  loadMeta,
+  saveMeta,
+  resetMeta,
+  calculateRunXp,
+  grantXp,
+  tierUnlocked,
+  canPurchase,
+  purchase,
+  computeRunModifiers,
+} from "./meta.js";
 
 // ---------- Config ----------
 const COLS = 6;
@@ -51,6 +64,19 @@ const state = {
   regenCounter: 0,
   growthLevel: 0, // number of times player has grown
   log: [],
+  // Per-run counters, used for XP calculation at run end.
+  runStats: {
+    levelsCompleted: 0,
+    enemiesDefeated: 0,
+    goldEarned: 0,
+    itemsDigested: 0,
+    bossDefeated: false,
+  },
+  // Meta save (loaded in start, persisted on XP grant / purchase).
+  meta: null,
+  // Modifier accumulator derived from state.meta.unlocks, recomputed at the
+  // start of every run.
+  runMods: null,
 };
 
 // Dev tools state — toggled from the dev panel, consulted by combat/grow code.
@@ -201,15 +227,23 @@ function getHeldBonuses() {
   return { attack, damageReduction, maxHpBonus, regen, regenInterval };
 }
 
+// Centralised positive-gold source so run-stats stay accurate.
+function addGold(amount) {
+  if (!amount || amount <= 0) return;
+  state.gold += amount;
+  state.runStats.goldEarned += amount;
+}
+
 function applyDigest(item) {
   const d = item.def.digest || {};
+  state.runStats.itemsDigested++;
   if (d.heal) {
     state.hp = Math.min(effectiveMaxHp(), state.hp + d.heal);
     pushLog(`Digested ${item.def.name}: +${d.heal} HP`);
     floatText("heal", `+${d.heal}`, slimeEl);
   }
   if (d.gold) {
-    state.gold += d.gold;
+    addGold(d.gold);
     pushLog(`Digested ${item.def.name}: +${d.gold} 🪙`);
     floatText("gold", `+${d.gold}`, slimeEl);
   }
@@ -339,11 +373,12 @@ function tick() {
     if (state.buffs[name] <= 0) delete state.buffs[name];
   }
 
-  // 3. Advance digestion for stomach items
+  // 3. Advance digestion for stomach items (quickDigest upgrade speeds this up)
+  const digestStep = state.runMods?.digestSpeedMult || 1;
   for (let i = 0; i < state.stomachSlots.length; i++) {
     const item = state.stomachSlots[i];
     if (!item) continue;
-    item.digestProgress++;
+    item.digestProgress += digestStep;
     if (item.digestProgress >= item.def.digestTime) {
       applyDigest(item);
       state.stomachSlots[i] = null;
@@ -391,6 +426,20 @@ function tick() {
     ent.col = nextCol;
 
     // Slime not in this lane: entities in col 0 just despawn next tick
+  }
+
+  // 4b. Magnetic Body: vacuum items from adjacent lanes at slime's column.
+  if (state.runMods?.magneticBody) {
+    const magnetTargets = state.entities.filter(
+      (e) =>
+        e.type === "item" &&
+        e.col === SLIME_COL &&
+        Math.abs(e.lane - state.lane) === 1
+    );
+    for (const ent of magnetTargets) {
+      tryPickupItem(ent.def.itemKey);
+      removeEntity(ent);
+    }
   }
 
   // 5. Combat continues for enemies still sharing slime's cell (multi-tick combat)
@@ -473,8 +522,9 @@ function resolveCombatRound(enemy) {
 
   if (enemy.hp <= 0) {
     // Loot
+    state.runStats.enemiesDefeated++;
     const goldDrop = enemy.def.gold || 0;
-    state.gold += goldDrop;
+    addGold(goldDrop);
     pushLog(`Defeated ${enemy.def.name} (+${goldDrop}🪙)`);
     if (enemy.def.dropChance && enemy.def.dropPool && Math.random() < enemy.def.dropChance) {
       const key = pick(enemy.def.dropPool);
@@ -554,22 +604,12 @@ function openLocation(ent) {
 function onLevelComplete() {
   state.paused = true;
   updatePauseBtn();
+  state.runStats.levelsCompleted++;
   const node = currentMapNode();
   if (node && node.type === "boss") {
-    openModal({
-      title: "🏆 Run Complete!",
-      body: `You defeated the Gelatinous King!\n\nGold: ${state.gold} · HP: ${state.hp}/${effectiveMaxHp()}\n\nMeta-progression and more content coming.`,
-      actions: [
-        {
-          label: "New Run",
-          primary: true,
-          onClick: () => {
-            closeModal();
-            restartRun();
-          },
-        },
-      ],
-    });
+    state.runStats.bossDefeated = true;
+    state.running = false;
+    openRunEndScreen(true);
     return;
   }
   openMapPicker();
@@ -630,43 +670,47 @@ function advanceToNode(node) {
 
 function onDeath() {
   state.running = false;
-  openModal({
-    title: "💀 You died",
-    body: `You reached Level ${state.level}.\nGold collected: ${state.gold}\nTicks survived: ${state.tick}`,
-    actions: [
-      {
-        label: "Try Again",
-        primary: true,
-        onClick: () => {
-          closeModal();
-          restartRun();
-        },
-      },
-    ],
-  });
+  openRunEndScreen(false);
 }
 
 function restartRun() {
+  runEndAwarded = false;
+  // Recompute modifiers from current meta so purchases made mid-session
+  // take effect on the next run.
+  const mods = computeRunModifiers(state.meta);
+  state.runMods = mods;
+
   state.tick = 0;
   // Note: state.tickInterval is intentionally NOT reset so dev-tool speed
   // settings persist across run resets during testing.
   state.paused = false;
   state.running = true;
-  state.hp = 20;
-  state.maxHp = 20;
-  state.gold = 0;
+  state.maxHp = 20 + (mods.maxHpBonus || 0);
+  state.hp = state.maxHp;
+  state.gold = mods.startGold || 0;
   state.lane = 1;
   state.level = 1;
   state.levelTicks = 0;
   state.terminusSpawned = false;
   state.terminusDefeated = false;
   state.entities = [];
-  state.heldSlots = [null, null, null, null];
-  state.stomachSlots = [null, null];
+  state.heldSlots = new Array(4 + (mods.heldCells || 0)).fill(null);
+  state.stomachSlots = new Array(2 + (mods.stomachCells || 0)).fill(null);
   state.selected = null;
   state.buffs = {};
   state.regenCounter = 0;
   state.growthLevel = 0;
+  state.runStats = {
+    levelsCompleted: 0,
+    enemiesDefeated: 0,
+    goldEarned: 0,
+    itemsDigested: 0,
+    bossDefeated: false,
+  };
+  // Seed starting items from meta unlocks.
+  for (const key of mods.startItems || []) {
+    tryPickupItem(key);
+  }
   state.map = generateRunMap();
   state.mapNode = { row: 0, col: 0 };
   closeModal();
@@ -720,8 +764,15 @@ function discardSelected() {
   updateHUD();
 }
 
+function growCost() {
+  if (devState.freeGrowth) return 0;
+  const base = 10 + state.growthLevel * 5;
+  const mult = state.runMods?.growCostMult || 1;
+  return Math.max(1, Math.round(base * mult));
+}
+
 function growSlime() {
-  const cost = devState.freeGrowth ? 0 : 10 + state.growthLevel * 5;
+  const cost = growCost();
   if (state.gold < cost) {
     pushLog(`Need ${cost}🪙 to grow`);
     return;
@@ -767,6 +818,196 @@ function growSlime() {
           closeModal();
           state.paused = false;
           updatePauseBtn();
+        },
+      },
+    ],
+  });
+}
+
+// ---------- Run end + meta menu ----------
+// Guard so re-opening the run-end screen from the meta menu doesn't re-award XP.
+let runEndAwarded = false;
+
+function openRunEndScreen(victory) {
+  state.paused = true;
+  updatePauseBtn();
+
+  const xp = calculateRunXp(state.runStats);
+  if (!runEndAwarded) {
+    grantXp(state.meta, xp.total);
+    state.meta.lastRun = {
+      xp: xp.total,
+      victory,
+      stats: { ...state.runStats },
+      levelReached: state.level,
+    };
+    saveMeta(state.meta);
+    runEndAwarded = true;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "run-end";
+
+  const summary = document.createElement("div");
+  summary.className = "run-end-summary";
+  summary.textContent = victory
+    ? `You defeated the Gelatinous King! Reached Level ${state.level}.`
+    : `You died on Level ${state.level}.`;
+  wrap.appendChild(summary);
+
+  const stats = document.createElement("div");
+  stats.className = "run-end-stats";
+  stats.innerHTML = `
+    <div><span>Levels cleared</span><b>${state.runStats.levelsCompleted}</b></div>
+    <div><span>Enemies slain</span><b>${state.runStats.enemiesDefeated}</b></div>
+    <div><span>Gold earned</span><b>${state.runStats.goldEarned}</b></div>
+    <div><span>Items digested</span><b>${state.runStats.itemsDigested}</b></div>
+    <div><span>Boss defeated</span><b>${state.runStats.bossDefeated ? "yes" : "no"}</b></div>
+  `;
+  wrap.appendChild(stats);
+
+  const xpHeader = document.createElement("div");
+  xpHeader.className = "run-end-xp-header";
+  xpHeader.textContent = `Slime XP earned: +${xp.total}`;
+  wrap.appendChild(xpHeader);
+
+  const xpBreak = document.createElement("div");
+  xpBreak.className = "run-end-breakdown";
+  xpBreak.innerHTML = `
+    <div>Levels · +${xp.breakdown.levels}</div>
+    <div>Enemies · +${xp.breakdown.enemies}</div>
+    <div>Gold · +${xp.breakdown.gold}</div>
+    <div>Items · +${xp.breakdown.items}</div>
+    <div>Boss · +${xp.breakdown.boss}</div>
+  `;
+  wrap.appendChild(xpBreak);
+
+  const total = document.createElement("div");
+  total.className = "run-end-total";
+  total.textContent = `Lifetime: ${state.meta.totalXp} XP · Available: ${state.meta.availableXp} XP`;
+  wrap.appendChild(total);
+
+  openModal({
+    title: victory ? "🏆 Victory!" : "💀 You Died",
+    bodyEl: wrap,
+    actions: [
+      {
+        label: "Meta Progression",
+        onClick: () => {
+          closeModal();
+          openMetaMenu(() => openRunEndScreen(victory));
+        },
+      },
+      {
+        label: "New Run",
+        primary: true,
+        onClick: () => {
+          closeModal();
+          restartRun();
+        },
+      },
+    ],
+  });
+}
+
+function openMetaMenu(onClose) {
+  state.paused = true;
+  updatePauseBtn();
+
+  const wrap = document.createElement("div");
+  wrap.className = "meta-menu";
+
+  const header = document.createElement("div");
+  header.className = "meta-header";
+  header.textContent = `Available XP: ${state.meta.availableXp} · Lifetime: ${state.meta.totalXp}`;
+  wrap.appendChild(header);
+
+  // Group upgrades by tier
+  const byTier = { 1: [], 2: [], 3: [] };
+  for (const [id, def] of Object.entries(UPGRADES)) {
+    byTier[def.tier].push({ id, def });
+  }
+
+  for (const tier of [1, 2, 3]) {
+    const section = document.createElement("div");
+    section.className = "meta-tier";
+    const unlocked = tierUnlocked(state.meta, tier);
+    if (!unlocked) section.classList.add("tier-locked");
+
+    const label = document.createElement("div");
+    label.className = "meta-tier-label";
+    const names = { 1: "Tier 1 · Body", 2: "Tier 2 · Abilities", 3: "Tier 3 · Loadout" };
+    const threshold = TIER_THRESHOLDS[tier] || 0;
+    label.textContent = unlocked
+      ? names[tier]
+      : `${names[tier]}  🔒  requires ${threshold} lifetime XP`;
+    section.appendChild(label);
+
+    const grid = document.createElement("div");
+    grid.className = "meta-grid";
+    for (const { id, def } of byTier[tier]) {
+      const card = document.createElement("div");
+      card.className = "meta-upgrade";
+      const owned = !!state.meta.unlocks[id];
+      const canBuy = canPurchase(state.meta, id);
+      const reqMet = !def.requires || !!state.meta.unlocks[def.requires];
+
+      if (owned) card.classList.add("owned");
+      else if (canBuy) card.classList.add("available");
+      else card.classList.add("unavailable");
+
+      const name = document.createElement("div");
+      name.className = "meta-name";
+      name.textContent = def.name;
+      card.appendChild(name);
+
+      const desc = document.createElement("div");
+      desc.className = "meta-desc";
+      desc.textContent = def.desc;
+      card.appendChild(desc);
+
+      const foot = document.createElement("div");
+      foot.className = "meta-foot";
+      if (owned) {
+        foot.textContent = "✓ Owned";
+      } else if (!unlocked) {
+        foot.textContent = `Tier locked`;
+      } else if (def.requires && !reqMet) {
+        foot.textContent = `Requires ${UPGRADES[def.requires]?.name || def.requires}`;
+      } else {
+        foot.textContent = `${def.cost} XP`;
+      }
+      card.appendChild(foot);
+
+      if (canBuy) {
+        card.addEventListener("click", () => {
+          if (purchase(state.meta, id)) {
+            saveMeta(state.meta);
+            // Re-render the menu in place.
+            openMetaMenu(onClose);
+          }
+        });
+      }
+      grid.appendChild(card);
+    }
+    section.appendChild(grid);
+    wrap.appendChild(section);
+  }
+
+  openModal({
+    title: "🧬 Meta Progression",
+    bodyEl: wrap,
+    actions: [
+      {
+        label: "Back",
+        primary: true,
+        onClick: () => {
+          closeModal();
+          if (onClose) onClose();
+          else {
+            state.paused = false;
+            updatePauseBtn();
+          }
         },
       },
     ],
@@ -845,7 +1086,7 @@ function renderInventory() {
   renderZone(heldZoneEl, state.heldSlots, "held");
   renderZone(stomachZoneEl, state.stomachSlots, "stomach");
   discardBtn.disabled = !state.selected;
-  const cost = devState.freeGrowth ? 0 : 10 + state.growthLevel * 5;
+  const cost = growCost();
   growBtn.textContent = `🧪 Grow (${cost}🪙)`;
   growBtn.disabled = state.gold < cost;
 }
@@ -943,10 +1184,8 @@ function hookInput() {
 // ---------- Boot ----------
 function start() {
   hookInput();
-  state.map = generateRunMap();
-  state.mapNode = { row: 0, col: 0 };
-  renderAll();
-  showBanner("— Level 1: Start —");
+  state.meta = loadMeta();
+  restartRun();
   setTickIntervalMs(state.tickInterval);
   initDevTools({
     state,
@@ -975,6 +1214,15 @@ function start() {
       updatePauseBtn();
       renderAll();
       showBanner("— Level 1: Start —");
+    },
+    openMetaMenu,
+    grantMetaXp: (amount) => {
+      grantXp(state.meta, amount);
+      saveMeta(state.meta);
+    },
+    resetMeta: () => {
+      state.meta = resetMeta();
+      saveMeta(state.meta);
     },
     COLS,
     levelTickLength,
