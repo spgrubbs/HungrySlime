@@ -22,6 +22,9 @@ export function initDevTools(api) {
     spawnTerminus,
     advanceToNode,
     rerollMap,
+    openMetaMenu,
+    grantMetaXp,
+    resetMeta,
     COLS,
     levelTickLength,
     MAX_LEVEL,
@@ -216,6 +219,15 @@ export function initDevTools(api) {
     </div>
 
     <div class="dev-section">
+      <label>Meta Progression</label>
+      <div class="dev-row">
+        <button type="button" id="dev-meta-open">Open Meta</button>
+        <button type="button" id="dev-meta-xp">+50 XP</button>
+        <button type="button" id="dev-meta-reset">Reset Meta</button>
+      </div>
+    </div>
+
+    <div class="dev-section">
       <label>State</label>
       <div id="dev-info" class="dev-info">—</div>
     </div>
@@ -342,6 +354,25 @@ export function initDevTools(api) {
     .querySelector("#dev-killall")
     .addEventListener("click", () => actions.killAllEnemies());
 
+  // Meta
+  panel.querySelector("#dev-meta-open").addEventListener("click", () => {
+    togglePanel(false);
+    openMetaMenu(() => {
+      state.paused = false;
+      updatePauseBtn();
+    });
+  });
+  panel.querySelector("#dev-meta-xp").addEventListener("click", () => {
+    grantMetaXp(50);
+    showBanner("+50 Slime XP", 1200);
+    updateInfo();
+  });
+  panel.querySelector("#dev-meta-reset").addEventListener("click", () => {
+    resetMeta();
+    showBanner("Meta progression reset", 1200);
+    updateInfo();
+  });
+
   // ---------- Live state inspector ----------
   const infoEl = panel.querySelector("#dev-info");
   function updateInfo() {
@@ -360,6 +391,7 @@ export function initDevTools(api) {
       <div>entities: <b>${state.entities.length}</b> · speed: <b>${speedMult}x</b> · paused: <b>${state.paused ? "yes" : "no"}</b></div>
       <div>god: <b>${devState.godMode ? "ON" : "OFF"}</b> · freeGrow: <b>${devState.freeGrowth ? "ON" : "OFF"}</b></div>
       <div>buffs: <b>${buffs}</b></div>
+      <div>meta XP: <b>${state.meta?.availableXp ?? 0}</b> / lifetime <b>${state.meta?.totalXp ?? 0}</b> · unlocks <b>${state.meta ? Object.keys(state.meta.unlocks || {}).length : 0}</b></div>
     `;
   }
   // Passive refresh so the inspector stays current without touching the tick loop.
