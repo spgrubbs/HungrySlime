@@ -5,6 +5,73 @@
 //
 // Effects are read at the appropriate spot in the game loop via the helpers
 // at the bottom of this module.
+//
+// Some mutations grant a new STOMACH cell appended to the slime's inventory
+// (effect.addStomach: "<kind>"). The available stomach kinds are defined here
+// so both data and rendering can share the same source of truth.
+
+export const STOMACH_KINDS = {
+  none: {
+    id: "none",
+    label: "Inert Cell",
+    icon: "·",
+    desc: "Empty cell. Items pass through and provide no effect.",
+    digests: false,
+    speedMult: 0,
+    yieldMult: 1,
+    holds: false,
+    color: "#1a2140",
+    border: "#2a3356",
+  },
+  digest: {
+    id: "digest",
+    label: "Digestive Sac",
+    icon: "🌀",
+    desc: "Slowly digests items inside, applying their digest effects.",
+    digests: true,
+    speedMult: 1,
+    yieldMult: 1,
+    holds: false,
+    color: "#22163a",
+    border: "#402a56",
+  },
+  fast: {
+    id: "fast",
+    label: "Hyper Vacuole",
+    icon: "⚡",
+    desc: "Digests items twice as fast.",
+    digests: true,
+    speedMult: 2,
+    yieldMult: 1,
+    holds: false,
+    color: "#3a1a2a",
+    border: "#56335a",
+  },
+  acid: {
+    id: "acid",
+    label: "Acid Sac",
+    icon: "🧪",
+    desc: "Digests items at normal speed but doubles their digest yield.",
+    digests: true,
+    speedMult: 1,
+    yieldMult: 2,
+    holds: false,
+    color: "#1a3a26",
+    border: "#2a5a3a",
+  },
+  holding: {
+    id: "holding",
+    label: "Holding Pouch",
+    icon: "💠",
+    desc: "Holds an item indefinitely and grants its held effect. Other items pass it by.",
+    digests: false,
+    speedMult: 0,
+    yieldMult: 1,
+    holds: true,
+    color: "#3a2a14",
+    border: "#5a4520",
+  },
+};
 
 export const MUTATIONS = {
   acidic_skin: {
@@ -90,6 +157,30 @@ export const MUTATIONS = {
     icon: "✨",
     desc: "Start each level with +5 HP.",
     effect: { levelStartHeal: 5 },
+  },
+  // ----- Stomach-granting mutations -----
+  // These append a new cell of a specific kind to the slime's inventory.
+  // Cells can be rearranged in-run from the inventory panel.
+  auxiliary_pouch: {
+    id: "auxiliary_pouch",
+    name: "Auxiliary Pouch",
+    icon: "💠",
+    desc: "Grow a Holding Pouch cell. Items inside stay forever and grant their held effect.",
+    effect: { addStomach: "holding" },
+  },
+  hyper_vacuole: {
+    id: "hyper_vacuole",
+    name: "Hyper Vacuole",
+    icon: "⚡",
+    desc: "Grow a Hyper Vacuole cell that digests items twice as fast.",
+    effect: { addStomach: "fast" },
+  },
+  acid_sac: {
+    id: "acid_sac",
+    name: "Acid Sac",
+    icon: "🧪",
+    desc: "Grow an Acid Sac that doubles the digest yield of any item it processes.",
+    effect: { addStomach: "acid" },
   },
 };
 
