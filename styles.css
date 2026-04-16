@@ -1130,3 +1130,54 @@ button {
   border-radius: 4px;
   cursor: help;
 }
+
+/* ---------- Shop / Merchant ---------- */
+.shop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.shop-card {
+  background: #0f1526;
+  border: 1px solid #3a4a6a;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.shop-card:hover { background: #1a2640; }
+.shop-card.too-expensive { opacity: 0.45; cursor: default; }
+.shop-card.sold { opacity: 0.3; pointer-events: none; }
+.shop-emoji { font-size: 22px; }
+.shop-name { font-size: 11px; color: #dfe; font-weight: 600; }
+.shop-price { font-size: 11px; color: #fc6; }
+.shop-card.sellable { border-color: #6a6a3a; }
+.shop-card.sellable:hover { background: #1a2010; }
+
+/* ---------- Shrine ---------- */
+.shrine-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shrine-card {
+  background: #1a0f2a;
+  border: 1px solid #6b3f9c;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.shrine-card:hover { background: #2a1a3e; }
+.shrine-icon { font-size: 20px; flex-shrink: 0; }
+.shrine-name { font-size: 12px; color: #daf; font-weight: 700; }
+.shrine-desc { font-size: 11px; color: #abc; }

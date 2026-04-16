@@ -18,6 +18,8 @@ import {
   TERMINI,
   OBSTACLES,
   LOCATIONS,
+  SHOP_PRICES,
+  SHRINE_BLESSINGS,
 } from "./data.js";
 import { getMutationBonuses } from "./mutations.js";
 import {
@@ -34,6 +36,7 @@ import {
   openModal,
   closeModal,
   updatePauseBtn,
+  updateHUD,
   renderAll,
 } from "./ui.js";
 
@@ -77,7 +80,23 @@ export function spawnRandomPathEntity() {
   if ((roll -= w.enemy) < 0) {
     const pool = ENEMY_POOL_BY_LEVEL[state.level] || ENEMY_POOL_BY_LEVEL[1];
     const enemyKey = pick(pool);
-    spawnEntity(ENEMIES[enemyKey], "enemy", lane, col);
+    const def = ENEMIES[enemyKey];
+    if (def.swarm) {
+      for (let l = 0; l < LANES; l++) {
+        if (!state.entities.some((e) => e.lane === l && e.col === col)) {
+          spawnEntity({ ...def }, "enemy", l, col);
+        }
+      }
+    } else if (def.mimic) {
+      spawnEntity(
+        { id: def.id, emoji: "🎁", itemKey: null, mimicDef: def },
+        "item",
+        lane,
+        col
+      );
+    } else {
+      spawnEntity(def, "enemy", lane, col);
+    }
   } else if ((roll -= w.item) < 0) {
     const itemKey = randomItemKey();
     spawnEntity(
@@ -95,7 +114,13 @@ export function spawnRandomPathEntity() {
     else obs = OBSTACLES.boulder;
     spawnEntity(obs, "obstacle", lane, col);
   } else {
-    spawnEntity(LOCATIONS.fountain, "location", lane, col);
+    const locRoll = Math.random();
+    let loc;
+    if (locRoll < 0.35) loc = LOCATIONS.fountain;
+    else if (locRoll < 0.6) loc = LOCATIONS.shop;
+    else if (locRoll < 0.8) loc = LOCATIONS.shrine;
+    else loc = LOCATIONS.merchant;
+    spawnEntity(loc, "location", lane, col);
   }
 }
 
@@ -125,10 +150,21 @@ export function spawnTerminus() {
 // reductions and god-mode into account.
 export function applyObstacleDamageToSlime(ent) {
   const mut = state.mutBonuses || getMutationBonuses(state.mutations);
+  const ironSkin = state.buffs.iron_skin ? 1 : 0;
   const reduction =
-    getHeldBonuses().damageReduction + (mut.damageReduction || 0);
+    getHeldBonuses().damageReduction + (mut.damageReduction || 0) + ironSkin;
   const rawDmg = Math.max(0, (ent.def.damage || 0) - reduction);
-  const dmg = devState.godMode ? 0 : rawDmg;
+  let dmg = devState.godMode ? 0 : rawDmg;
+  if (dmg > 0 && state.shield > 0) {
+    const absorbed = Math.min(dmg, state.shield);
+    state.shield -= absorbed;
+    dmg -= absorbed;
+    floatText("heal", `🛡${absorbed}`, slimeEl);
+    if (state.shield <= 0) {
+      delete state.buffs.shield;
+      pushLog("Shield broken!");
+    }
+  }
   state.hp -= dmg;
   pushLog(`${ent.def.name} hits you for ${dmg}`);
   if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
@@ -148,8 +184,22 @@ export function handleEncounter(ent) {
       ent.col = SLIME_COL + 1;
     }
   } else if (ent.type === "item") {
-    tryPickupItem(ent.def.itemKey);
-    removeEntity(ent);
+    if (ent.def.mimicDef) {
+      // Mimic reveals itself!
+      showBanner("It's a Mimic!", 1200);
+      pushLog("Mimic reveals itself!");
+      ent.type = "enemy";
+      ent.def = ent.def.mimicDef;
+      ent.hp = ent.def.hp;
+      ent.maxHp = ent.def.hp;
+      resolveCombatRound(ent);
+      if (state.entities.includes(ent)) {
+        ent.col = SLIME_COL + 1;
+      }
+    } else {
+      tryPickupItem(ent.def.itemKey);
+      removeEntity(ent);
+    }
   } else if (ent.type === "obstacle") {
     if (ent.def.blocking) {
       // Walked into a boulder. It hits the slime once and the slime's
@@ -206,6 +256,13 @@ export function handleSlideInteraction(mover, blocker) {
   // Default: just don't move this tick.
 }
 
+function applyEnemyDeathEffects(def) {
+  if (def.onDeath?.burn) {
+    state.buffs.burn = (state.buffs.burn || 0) + def.onDeath.burn;
+    pushLog(`${def.name}'s dying flame burns you!`);
+  }
+}
+
 export function resolveCombatRound(enemy) {
   const bonuses = getHeldBonuses();
   const mut = state.mutBonuses || getMutationBonuses(state.mutations);
@@ -218,13 +275,15 @@ export function resolveCombatRound(enemy) {
     // Loot
     state.runStats.enemiesDefeated++;
     const baseGold = enemy.def.gold || 0;
-    const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1));
+    const goldenTouch = state.buffs.golden_touch ? 1.5 : 1;
+    const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1) * goldenTouch);
     addGold(goldDrop);
     pushLog(`Defeated ${enemy.def.name} (+${goldDrop}🪙)`);
     if (enemy.def.dropChance && enemy.def.dropPool && Math.random() < enemy.def.dropChance) {
       const key = pick(enemy.def.dropPool);
       tryPickupItem(key);
     }
+    applyEnemyDeathEffects(enemy.def);
     removeEntity(enemy);
     return;
   }
@@ -237,21 +296,35 @@ export function resolveCombatRound(enemy) {
 
   // Enemy hits slime
   const rawDmg = enemy.def.attack || 0;
-  const reduction = bonuses.damageReduction + (mut.damageReduction || 0);
-  const dmg = devState.godMode ? 0 : Math.max(0, rawDmg - reduction);
+  const ironSkin = state.buffs.iron_skin ? 1 : 0;
+  const reduction = bonuses.damageReduction + (mut.damageReduction || 0) + ironSkin;
+  let dmg = devState.godMode ? 0 : Math.max(0, rawDmg - reduction);
+  // Shield buff absorbs damage before HP.
+  if (dmg > 0 && state.shield > 0) {
+    const absorbed = Math.min(dmg, state.shield);
+    state.shield -= absorbed;
+    dmg -= absorbed;
+    floatText("heal", `🛡${absorbed}`, slimeEl);
+    if (state.shield <= 0) {
+      delete state.buffs.shield;
+      pushLog("Shield broken!");
+    }
+  }
   state.hp -= dmg;
   if (dmg > 0) floatText("dmg", `-${dmg}`, slimeEl);
 
-  // Acidic Skin: thorns reflect when actually struck.
-  if (dmg > 0 && mut.thorns > 0) {
-    enemy.hp -= mut.thorns;
-    floatText("dmg", `-${mut.thorns}`, slimeEl);
+  // Thorns: Acidic Skin mutation + Thorn Aura blessing.
+  const totalThorns = (mut.thorns || 0) + (state.buffs.thorn_aura ? 1 : 0);
+  if (dmg > 0 && totalThorns > 0) {
+    enemy.hp -= totalThorns;
+    floatText("dmg", `-${totalThorns}`, slimeEl);
     if (enemy.hp <= 0) {
       state.runStats.enemiesDefeated++;
       const baseGold = enemy.def.gold || 0;
       const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1));
       addGold(goldDrop);
       pushLog(`${enemy.def.name} dissolved on your skin (+${goldDrop}🪙)`);
+      applyEnemyDeathEffects(enemy.def);
       removeEntity(enemy);
     }
   }
@@ -294,22 +367,161 @@ export function openLocation(ent) {
       ],
     });
   } else if (loc.id === "shop") {
-    openModal({
-      title: "🏪 Shop",
-      body: "A shop. Coming soon.",
-      actions: [
-        {
-          label: "Continue",
-          primary: true,
-          onClick: () => {
-            removeEntity(ent);
-            closeModal();
-            state.paused = false;
-            updatePauseBtn();
-            renderAll();
-          },
-        },
-      ],
-    });
+    openShop(ent);
+  } else if (loc.id === "shrine") {
+    openShrine(ent);
+  } else if (loc.id === "merchant") {
+    openMerchant(ent);
   }
+}
+
+function leaveLocation(ent) {
+  removeEntity(ent);
+  closeModal();
+  state.paused = false;
+  updatePauseBtn();
+  renderAll();
+}
+
+function openShop(ent) {
+  const numItems = 3 + Math.min(2, Math.floor(state.level / 2));
+  const stock = [];
+  for (let i = 0; i < numItems; i++) {
+    const r = Math.random();
+    let rarity;
+    if (state.level >= 4 && r < 0.05) rarity = "legendary";
+    else if (state.level >= 2 && r < 0.2) rarity = "rare";
+    else if (r < 0.5) rarity = "uncommon";
+    else rarity = "common";
+    const key = randomItemKey(rarity);
+    const def = ITEMS[key];
+    const price = SHOP_PRICES[def.rarity] || 10;
+    stock.push({ key, def, price });
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "shop-grid";
+
+  for (const item of stock) {
+    const card = document.createElement("div");
+    card.className = "shop-card";
+    card.innerHTML = `<span class="shop-emoji">${item.def.emoji}</span><span class="shop-name">${item.def.name}</span><span class="shop-price">${item.price}🪙</span>`;
+    if (state.gold < item.price) card.classList.add("too-expensive");
+    card.addEventListener("click", () => {
+      if (state.gold < item.price || card.classList.contains("sold")) return;
+      state.gold -= item.price;
+      tryPickupItem(item.key);
+      card.classList.add("sold");
+      card.querySelector(".shop-price").textContent = "SOLD";
+      updateHUD();
+    });
+    wrap.appendChild(card);
+  }
+
+  openModal({
+    title: "🏪 Shop",
+    bodyEl: wrap,
+    actions: [
+      {
+        label: "Leave Shop",
+        primary: true,
+        onClick: () => leaveLocation(ent),
+      },
+    ],
+  });
+}
+
+function openShrine(ent) {
+  const keys = Object.keys(SHRINE_BLESSINGS);
+  const available = keys.filter((k) => !state.blessings.includes(k));
+  if (available.length === 0) {
+    openModal({
+      title: "🪬 Shrine",
+      body: "The shrine is dim — you've already received all blessings.",
+      actions: [{ label: "Leave", primary: true, onClick: () => leaveLocation(ent) }],
+    });
+    return;
+  }
+  const shuffled = available.sort(() => Math.random() - 0.5);
+  const choices = shuffled.slice(0, Math.min(3, shuffled.length));
+
+  const wrap = document.createElement("div");
+  wrap.className = "shrine-grid";
+
+  for (const key of choices) {
+    const b = SHRINE_BLESSINGS[key];
+    const card = document.createElement("div");
+    card.className = "shrine-card";
+    card.innerHTML = `<span class="shrine-icon">${b.icon}</span><span class="shrine-name">${b.name}</span><span class="shrine-desc">${b.desc}</span>`;
+    card.addEventListener("click", () => {
+      state.blessings.push(key);
+      if (b.buff === "vitality") {
+        state.maxHp += 5;
+        state.hp = Math.min(effectiveMaxHp(), state.hp + 5);
+        pushLog("Vitality: +5 max HP");
+      } else {
+        state.buffs[b.buff] = Infinity;
+        pushLog(`Blessing: ${b.name}`);
+      }
+      updateHUD();
+      leaveLocation(ent);
+    });
+    wrap.appendChild(card);
+  }
+
+  openModal({
+    title: "🪬 Shrine",
+    bodyEl: wrap,
+    actions: [{ label: "Walk Away", onClick: () => leaveLocation(ent) }],
+  });
+}
+
+function openMerchant(ent) {
+  const sellable = [];
+  state.inventory.forEach((cell, idx) => {
+    if (cell.item) {
+      const price = Math.floor((SHOP_PRICES[cell.item.def.rarity] || 10) / 2);
+      sellable.push({ idx, item: cell.item, price });
+    }
+  });
+
+  if (sellable.length === 0) {
+    openModal({
+      title: "🐪 Merchant Caravan",
+      body: "The merchant eyes your empty pockets and shrugs.",
+      actions: [{ label: "Leave", primary: true, onClick: () => leaveLocation(ent) }],
+    });
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "shop-grid";
+
+  for (const s of sellable) {
+    const card = document.createElement("div");
+    card.className = "shop-card sellable";
+    card.innerHTML = `<span class="shop-emoji">${s.item.def.emoji}</span><span class="shop-name">${s.item.def.name}</span><span class="shop-price">Sell ${s.price}🪙</span>`;
+    card.addEventListener("click", () => {
+      if (card.classList.contains("sold")) return;
+      addGold(s.price);
+      state.inventory[s.idx].item = null;
+      card.classList.add("sold");
+      card.querySelector(".shop-price").textContent = "SOLD";
+      pushLog(`Sold ${s.item.def.name} for ${s.price}🪙`);
+      updateHUD();
+    });
+    wrap.appendChild(card);
+  }
+
+  openModal({
+    title: "🐪 Merchant Caravan",
+    bodyEl: wrap,
+    actions: [
+      {
+        label: "Leave",
+        primary: true,
+        onClick: () => leaveLocation(ent),
+      },
+    ],
+  });
 }

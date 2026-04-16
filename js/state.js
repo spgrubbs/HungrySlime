@@ -50,7 +50,9 @@ export const state = {
   // toggles whether the next click swaps items or swaps entire cells.
   selected: null,
   arrangeMode: false,
-  buffs: {}, // name -> remaining ticks
+  buffs: {}, // name -> remaining ticks (Infinity for permanent blessings)
+  shield: 0, // shield HP absorbs damage before real HP
+  blessings: [], // shrine blessing keys earned this run
   regenCounter: 0,
   passiveCounter: 0, // separate counter for mutation passive regen
   growthLevel: 0, // number of times player has grown

@@ -118,7 +118,8 @@ export function renderPath() {
 
 export function updateHUD() {
   const b = getHeldBonuses();
-  hpEl.textContent = `❤️ ${state.hp}/${effectiveMaxHp()}`;
+  const shieldStr = state.shield > 0 ? ` +🛡${state.shield}` : "";
+  hpEl.textContent = `❤️ ${state.hp}/${effectiveMaxHp()}${shieldStr}`;
   goldEl.textContent = `🪙 ${state.gold}`;
   atkEl.textContent = `⚔️ ${b.attack}`;
   lvlEl.textContent = `Lv ${state.level}`;
