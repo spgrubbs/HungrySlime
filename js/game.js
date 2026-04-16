@@ -586,6 +586,22 @@ function tick() {
     if (state.hp <= 0 || !state.running) break;
   }
 
+  // 5b. Blocking obstacles (boulders) deal contact damage every tick while
+  //     adjacent to the slime in the same lane.
+  if (state.hp > 0 && state.running) {
+    const adjacentBlockers = state.entities.filter(
+      (e) =>
+        e.type === "obstacle" &&
+        e.def.blocking &&
+        e.lane === state.lane &&
+        e.col === SLIME_COL + 1
+    );
+    for (const obs of adjacentBlockers) {
+      applyObstacleDamageToSlime(obs);
+      if (state.hp <= 0) break;
+    }
+  }
+
   // 6. Despawn any entities that slipped past (col < 0)
   state.entities = state.entities.filter((e) => e.col >= 0);
 
@@ -1063,7 +1079,7 @@ function addMutation(key) {
   const def = MUTATIONS[key];
   const stomachKind = def.effect && def.effect.addStomach;
   if (stomachKind && STOMACH_KINDS[stomachKind]) {
-    state.inventory.push({ kind: stomachKind, item: null });
+    state.inventory.unshift({ kind: stomachKind, item: null });
     pushLog(`Grew a ${STOMACH_KINDS[stomachKind].label}`);
   }
 }
@@ -1241,7 +1257,7 @@ function growSlime() {
   // Growth just adds an inert cell. Players use mutations to add stomachs
   // and arrange-mode to place them where they want.
   state.gold -= cost;
-  state.inventory.push({ kind: "none", item: null });
+  state.inventory.unshift({ kind: "none", item: null });
   state.growthLevel++;
   pushLog("Slime grows: +1 cell");
   renderAll();
