@@ -40,6 +40,7 @@ export const state = {
   mapNode: { row: 0, col: 0 },
   // Path entities: keyed by id, each has {id,type,def,lane,col,hp,maxHp}
   entities: [],
+  levelSchedule: [],
   // Inventory: a single flat array of cells. Each cell has a stomach kind
   // (see STOMACH_KINDS) and may hold one item instance.
   // Items enter at index 0 and cascade toward the end as new items push them.

@@ -12,6 +12,7 @@ import {
   applyObstacleDamageToSlime,
   spawnRandomPathEntity,
   spawnTerminus,
+  spawnScheduledEntity,
 } from "./combat.js";
 import { onLevelComplete, onDeath } from "./scenes.js";
 
@@ -60,10 +61,35 @@ export function tick() {
   }
 
   // 2. Tick active buffs and apply buff effects
+  const hadHaste = !!state.buffs.haste;
   for (const [name, ticks] of Object.entries(state.buffs)) {
     if (ticks === Infinity) continue; // permanent blessings never expire
     state.buffs[name] = ticks - 1;
-    if (state.buffs[name] <= 0) delete state.buffs[name];
+    if (state.buffs[name] <= 0) {
+      delete state.buffs[name];
+      // Bloat: remove temporary cells when buff expires.
+      if (name === "bloat") {
+        for (let i = 0; i < 2 && state.inventory.length > 1; i++) {
+          const idx = state.inventory.findIndex(
+            (c) => c.kind === "none" && !c.item
+          );
+          if (idx >= 0) state.inventory.splice(idx, 1);
+          else state.inventory.pop();
+        }
+        pushLog("Bloat fades — shrank by 2 cells");
+      }
+    }
+  }
+  // Haste: adjust tick speed when buff appears or disappears.
+  if (!!state.buffs.haste !== hadHaste) {
+    const base = state.baseTickInterval || state.tickInterval;
+    if (state.buffs.haste) {
+      state.baseTickInterval = base;
+      setTickIntervalMs(Math.round(base * 0.75));
+    } else {
+      setTickIntervalMs(state.baseTickInterval || base);
+      delete state.baseTickInterval;
+    }
   }
   // Burn DoT: slime takes 1 damage per tick while burning.
   if (state.buffs.burn) {
@@ -98,8 +124,9 @@ export function tick() {
   //    cells leave their items alone. Each cell's speedMult and yieldMult come
   //    from STOMACH_KINDS and stack with global modifiers.
   const blessingDigest = state.buffs.swift_stomach ? 1.25 : 1;
+  const acidBuff = state.buffs.acid ? 2 : 1;
   const baseDigestStep =
-    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest;
+    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest * acidBuff;
   for (let i = 0; i < state.inventory.length; i++) {
     const cell = state.inventory[i];
     if (!cell.item) continue;
@@ -212,13 +239,20 @@ export function tick() {
   // 6. Despawn any entities that slipped past (col < 0)
   state.entities = state.entities.filter((e) => e.col >= 0);
 
-  // 7. Level progression — spawn things
+  // 7. Level progression — spawn from pre-generated schedule or fallback
   const lvlLen = levelTickLength();
   if (state.levelTicks < lvlLen && !state.terminusSpawned) {
-    // Normal spawning
-    if (state.levelTicks % 2 === 0) spawnRandomPathEntity();
+    if (state.levelSchedule && state.levelSchedule.length > 0) {
+      while (
+        state.levelSchedule.length > 0 &&
+        state.levelSchedule[0].tick <= state.levelTicks
+      ) {
+        spawnScheduledEntity(state.levelSchedule.shift());
+      }
+    } else if (state.levelTicks % 2 === 0) {
+      spawnRandomPathEntity();
+    }
   } else if (!state.terminusSpawned && state.levelTicks >= lvlLen) {
-    // Time for the terminus. Make sure the lane is clear.
     spawnTerminus();
   }
 

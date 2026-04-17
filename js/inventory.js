@@ -80,6 +80,19 @@ export function pushIntoInventory(itemInstance) {
 export function tryPickupItem(key) {
   const inst = makeItemInstance(key);
   if (!inst) return false;
+  // Sticky buff: bypass cascade, place directly into a digesting cell.
+  if (state.buffs.sticky) {
+    for (let i = state.inventory.length - 1; i >= 0; i--) {
+      const cell = state.inventory[i];
+      const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+      if (kindCfg.digests && !cell.item) {
+        cell.item = inst;
+        inst.digestProgress = 0;
+        pushLog(`Sticky! ${ITEMS[key].name} sent to stomach`);
+        return true;
+      }
+    }
+  }
   if (pushIntoInventory(inst)) {
     pushLog(`Picked up ${ITEMS[key].name}`);
     return true;
@@ -150,15 +163,28 @@ export function applyDigest(item, yieldMult = 1) {
     pushLog(`+${d.permMaxHp} max HP permanently!`);
   }
   if (d.buff) {
+    const BUFF_DURATIONS = {
+      shield: Infinity,
+      poison_coat: 12,
+      burn_aura: 10,
+      haste: 8,
+      acid: 10,
+      sticky: 10,
+      bloat: 12,
+    };
     if (d.buff === "shield") {
       state.shield = (state.shield || 0) + 15;
       state.buffs.shield = Infinity;
       pushLog(`Gained shield (${state.shield} HP)`);
-    } else if (d.buff === "poison_coat") {
-      state.buffs.poison_coat = 12;
-      pushLog("Coated in venom!");
+    } else if (d.buff === "bloat") {
+      if (!state.buffs.bloat) {
+        state.inventory.push({ kind: "none", item: null });
+        state.inventory.push({ kind: "none", item: null });
+      }
+      state.buffs.bloat = BUFF_DURATIONS.bloat;
+      pushLog("Bloat! +2 temporary cells");
     } else {
-      state.buffs[d.buff] = 10;
+      state.buffs[d.buff] = BUFF_DURATIONS[d.buff] || 10;
       pushLog(`Gained buff: ${d.buff}`);
     }
   }
