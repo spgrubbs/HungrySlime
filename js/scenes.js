@@ -37,6 +37,7 @@ import {
   closeModal,
   pushLog,
 } from "./ui.js";
+import { generateLevelSchedule } from "./pathgen.js";
 
 // ---------- DOM refs ----------
 const overworldMapEl = $("overworld-map");
@@ -128,6 +129,7 @@ function enterRunScene() {
   state.paused = false;
   state.running = true;
   state.entities = [];
+  state.levelSchedule = generateLevelSchedule();
   // Glowing Core mutation: heal a bit on level start.
   const mut = state.mutBonuses || getMutationBonuses(state.mutations);
   if (mut.levelStartHeal > 0) {
@@ -346,6 +348,7 @@ export function beginNewRun() {
   state.terminusSpawned = false;
   state.terminusDefeated = false;
   state.entities = [];
+  state.levelSchedule = [];
   // Unified inventory: 6 default cells + any extras granted by meta upgrades.
   // The last cell is a digestive sac; everything else is inert until a player
   // mutation adds a typed stomach. Held/Stomach meta upgrades both contribute

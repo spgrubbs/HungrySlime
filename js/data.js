@@ -176,6 +176,50 @@ export const ITEMS = {
     tags: ["organic", "poison"],
     flavor: "Quick digest for a venom coating.",
   },
+  speed_berry: {
+    id: "speed_berry",
+    name: "Speed Berry",
+    emoji: "🫐",
+    rarity: "uncommon",
+    held: null,
+    digest: { buff: "haste", heal: 2 },
+    digestTime: 2,
+    tags: ["organic"],
+    flavor: "Eat for a burst of speed (8 ticks).",
+  },
+  acid_vial: {
+    id: "acid_vial",
+    name: "Acid Vial",
+    emoji: "🧫",
+    rarity: "uncommon",
+    held: null,
+    digest: { buff: "acid", heal: 1 },
+    digestTime: 1,
+    tags: ["elemental", "acid"],
+    flavor: "Eat to double digestion speed (10 ticks).",
+  },
+  slime_mold: {
+    id: "slime_mold",
+    name: "Slime Mold",
+    emoji: "🫧",
+    rarity: "rare",
+    held: null,
+    digest: { buff: "bloat", heal: 3 },
+    digestTime: 3,
+    tags: ["organic", "slime"],
+    flavor: "Eat to temporarily grow +2 cells (12 ticks).",
+  },
+  sticky_resin: {
+    id: "sticky_resin",
+    name: "Sticky Resin",
+    emoji: "🍯",
+    rarity: "uncommon",
+    held: null,
+    digest: { buff: "sticky", heal: 2 },
+    digestTime: 2,
+    tags: ["organic"],
+    flavor: "Eat to send pickups straight to stomach (10 ticks).",
+  },
   // --- Legendary items ---
   crystal_heart: {
     id: "crystal_heart",
@@ -225,8 +269,8 @@ export const ITEMS = {
 
 export const ITEM_POOL_BY_RARITY = {
   common: ["rusty_sword", "healing_herb", "gold_nugget", "slime_jelly"],
-  uncommon: ["flame_core", "shield_fragment", "bomb", "toxic_mushroom"],
-  rare: ["iron_blade", "venom_gland", "frost_shard", "life_root", "golden_idol", "fire_bomb", "thorned_hide"],
+  uncommon: ["flame_core", "shield_fragment", "bomb", "toxic_mushroom", "speed_berry", "acid_vial", "sticky_resin"],
+  rare: ["iron_blade", "venom_gland", "frost_shard", "life_root", "golden_idol", "fire_bomb", "thorned_hide", "slime_mold"],
   legendary: ["crystal_heart", "inferno_blade", "phoenix_feather", "void_gem"],
 };
 
@@ -322,7 +366,7 @@ export const TERMINI = {
   2: { id: "t2", name: "Bone Knight", emoji: "☠️", hp: 35, attack: 4, speed: 1, gold: 25, dropChance: 1, dropPool: ["rusty_sword", "shield_fragment"] },
   3: { id: "t3", name: "Ember Drake", emoji: "🐉", hp: 50, attack: 5, speed: 1, gold: 35, dropChance: 1, dropPool: ["flame_core"] },
   4: { id: "t4", name: "Ancient Golem", emoji: "🧱", hp: 70, attack: 6, speed: 2, gold: 50, dropChance: 1, dropPool: ["shield_fragment"] },
-  5: { id: "t5", name: "Gelatinous King", emoji: "👑", hp: 100, attack: 7, speed: 1, gold: 100, dropChance: 1, dropPool: ["bomb"] },
+  5: { id: "t5", name: "Gelatinous King", emoji: "👑", hp: 100, attack: 7, speed: 1, gold: 100, dropChance: 1, dropPool: ["bomb"], boss: true, phase: 1, absorbed: [] },
 };
 
 /** Obstacles
@@ -350,6 +394,8 @@ export const LOCATIONS = {
   shop: { id: "shop", name: "Shop", emoji: "🏪", cost: 0 },
   shrine: { id: "shrine", name: "Shrine", emoji: "🪬", cost: 0 },
   merchant: { id: "merchant", name: "Merchant Caravan", emoji: "🐪", cost: 0 },
+  pool: { id: "pool", name: "Mysterious Pool", emoji: "🌊", cost: 0 },
+  elder: { id: "elder", name: "Slime Elder", emoji: "🧙", cost: 0 },
 };
 
 /** Shop item prices by rarity */
