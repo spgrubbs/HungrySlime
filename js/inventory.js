@@ -22,10 +22,16 @@ export function makeItemInstance(key) {
 
 export function randomItemKey(rarity = null) {
   if (!rarity) {
-    // 80% common, 20% uncommon for basic drops
-    rarity = Math.random() < 0.2 ? "uncommon" : "common";
+    // Rarity roll scales with level: higher levels have better drop odds.
+    const r = Math.random();
+    const lvl = state.level || 1;
+    if (lvl >= 4 && r < 0.03) rarity = "legendary";
+    else if (lvl >= 2 && r < 0.08 + lvl * 0.02) rarity = "rare";
+    else if (r < 0.25) rarity = "uncommon";
+    else rarity = "common";
   }
   const pool = ITEM_POOL_BY_RARITY[rarity] || ITEM_POOL_BY_RARITY.common;
+  if (pool.length === 0) return pick(ITEM_POOL_BY_RARITY.common);
   return pick(pool);
 }
 
@@ -144,8 +150,17 @@ export function applyDigest(item, yieldMult = 1) {
     pushLog(`+${d.permMaxHp} max HP permanently!`);
   }
   if (d.buff) {
-    state.buffs[d.buff] = 10;
-    pushLog(`Gained buff: ${d.buff}`);
+    if (d.buff === "shield") {
+      state.shield = (state.shield || 0) + 15;
+      state.buffs.shield = Infinity;
+      pushLog(`Gained shield (${state.shield} HP)`);
+    } else if (d.buff === "poison_coat") {
+      state.buffs.poison_coat = 12;
+      pushLog("Coated in venom!");
+    } else {
+      state.buffs[d.buff] = 10;
+      pushLog(`Gained buff: ${d.buff}`);
+    }
   }
   if (d.enemyDamage) {
     // Enemies now stop one column to the right of the slime, so the bomb

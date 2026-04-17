@@ -355,6 +355,8 @@ export function beginNewRun() {
   state.selected = null;
   state.arrangeMode = false;
   state.buffs = {};
+  state.shield = 0;
+  state.blessings = [];
   state.regenCounter = 0;
   state.passiveCounter = 0;
   state.growthLevel = 0;

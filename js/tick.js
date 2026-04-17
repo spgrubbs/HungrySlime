@@ -2,8 +2,8 @@
 
 import { state, SLIME_COL, levelTickLength } from "./state.js";
 import { STOMACH_KINDS, getMutationBonuses } from "./mutations.js";
-import { getHeldBonuses, effectiveMaxHp, tryPickupItem, applyDigest } from "./inventory.js";
-import { floatText, renderAll } from "./ui.js";
+import { getHeldBonuses, effectiveMaxHp, tryPickupItem, applyDigest, addGold } from "./inventory.js";
+import { floatText, pushLog, renderAll } from "./ui.js";
 import {
   handleEncounter,
   handleSlideInteraction,
@@ -59,18 +59,47 @@ export function tick() {
     }
   }
 
-  // 2. Tick active buffs
+  // 2. Tick active buffs and apply buff effects
   for (const [name, ticks] of Object.entries(state.buffs)) {
+    if (ticks === Infinity) continue; // permanent blessings never expire
     state.buffs[name] = ticks - 1;
     if (state.buffs[name] <= 0) delete state.buffs[name];
+  }
+  // Burn DoT: slime takes 1 damage per tick while burning.
+  if (state.buffs.burn) {
+    state.hp -= 1;
+    floatText("dmg", "-1🔥", slimeEl);
+  }
+  // Poison Coat: adjacent enemies take 2 damage per tick.
+  if (state.buffs.poison_coat) {
+    const poisoned = state.entities.filter(
+      (e) =>
+        (e.type === "enemy" || e.type === "terminus") &&
+        e.lane === state.lane &&
+        e.col === SLIME_COL + 1
+    );
+    for (const enemy of poisoned) {
+      enemy.hp -= 2;
+      floatText("dmg", "-2🧪", slimeEl);
+      if (enemy.hp <= 0) {
+        state.runStats.enemiesDefeated++;
+        const goldDrop = Math.round(
+          (enemy.def.gold || 0) * (mut.enemyGoldMult || 1)
+        );
+        addGold(goldDrop);
+        pushLog(`Poison dissolved ${enemy.def.name} (+${goldDrop}🪙)`);
+        removeEntity(enemy);
+      }
+    }
   }
 
   // 3. Advance digestion across the unified inventory. Only cells whose kind
   //    has digests=true tick down their item's digestion timer; inert/holding
   //    cells leave their items alone. Each cell's speedMult and yieldMult come
   //    from STOMACH_KINDS and stack with global modifiers.
+  const blessingDigest = state.buffs.swift_stomach ? 1.25 : 1;
   const baseDigestStep =
-    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1);
+    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest;
   for (let i = 0; i < state.inventory.length; i++) {
     const cell = state.inventory[i];
     if (!cell.item) continue;
