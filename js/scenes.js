@@ -856,7 +856,7 @@ export function openWardrobe() {
 
   const header = document.createElement("div");
   header.className = "meta-header";
-  header.textContent = `🪙 ${state.meta.totalXp || 0} XP · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0}`;
+  header.textContent = `🪙 ${state.meta.gold || 0} · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0} · 💠 ${state.meta.gems || 0}`;
   wrap.appendChild(header);
 
   if (!state.meta.wardrobe) state.meta.wardrobe = { owned: ["default"], equipped: "default" };
@@ -872,21 +872,25 @@ export function openWardrobe() {
     card.className = "meta-upgrade";
 
     let canAfford = true;
+    let canAffordGems = false;
     let costStr = "";
+    let gemCost = 0;
     if (!owned && skin.cost) {
       const parts = [];
-      if (skin.cost.gold && (state.meta.totalXp || 0) < skin.cost.gold) canAfford = false;
+      if (skin.cost.gold && (state.meta.gold || 0) < skin.cost.gold) canAfford = false;
       if (skin.cost.scrap && (state.meta.scrap || 0) < skin.cost.scrap) canAfford = false;
       if (skin.cost.mana && (state.meta.mana || 0) < skin.cost.mana) canAfford = false;
       if (skin.cost.gold) parts.push(`${skin.cost.gold}🪙`);
       if (skin.cost.scrap) parts.push(`${skin.cost.scrap}🔩`);
       if (skin.cost.mana) parts.push(`${skin.cost.mana}🔮`);
       costStr = parts.join(" + ");
+      gemCost = skin.cost.gems || Math.ceil(((skin.cost.gold || 0) + (skin.cost.scrap || 0) * 3 + (skin.cost.mana || 0) * 3) / 10) || 5;
+      canAffordGems = (state.meta.gems || 0) >= gemCost;
     }
 
     if (equipped) card.classList.add("owned");
     else if (owned) card.classList.add("available");
-    else if (canAfford) card.classList.add("available");
+    else if (canAfford || canAffordGems) card.classList.add("available");
     else card.classList.add("unavailable");
 
     const name = document.createElement("div");
@@ -903,7 +907,8 @@ export function openWardrobe() {
     foot.className = "meta-foot";
     if (equipped) foot.textContent = "✓ Equipped";
     else if (owned) foot.textContent = "Click to equip";
-    else foot.textContent = costStr || "Free";
+    else if (costStr) foot.textContent = `${costStr}${gemCost ? ` or ${gemCost}💠` : ""}`;
+    else foot.textContent = "Free";
     card.appendChild(foot);
 
     card.addEventListener("click", () => {
@@ -914,10 +919,15 @@ export function openWardrobe() {
         openWardrobe();
         return;
       }
-      if (!canAfford) return;
-      if (skin.cost?.gold) state.meta.totalXp -= skin.cost.gold;
-      if (skin.cost?.scrap) state.meta.scrap -= skin.cost.scrap;
-      if (skin.cost?.mana) state.meta.mana -= skin.cost.mana;
+      if (canAfford) {
+        if (skin.cost?.gold) state.meta.gold -= skin.cost.gold;
+        if (skin.cost?.scrap) state.meta.scrap -= skin.cost.scrap;
+        if (skin.cost?.mana) state.meta.mana -= skin.cost.mana;
+      } else if (canAffordGems) {
+        state.meta.gems -= gemCost;
+      } else {
+        return;
+      }
       wd.owned.push(skin.id);
       wd.equipped = skin.id;
       saveMeta(state.meta);
