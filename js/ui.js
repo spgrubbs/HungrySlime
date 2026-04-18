@@ -200,7 +200,7 @@ export function renderPath() {
 
 function getSlimeSkinEmoji() {
   if (state.subclass) {
-    const SUBCLASS_EMOJI = { stoneslime: "🪨", spitslime: "💦", cauldronslime: "🧪", sparkslime: "⚡", acidslime: "🟢", cogslime: "⚙️" };
+    const SUBCLASS_EMOJI = { stoneslime: "🪨", spitslime: "💦", cauldronslime: "🧪", sparkslime: "⚡", acidslime: "🟢", cogslime: "⚙️", gourmetslime: "🍽️" };
     return SUBCLASS_EMOJI[state.subclass] || "🟢";
   }
   const equipped = state.meta?.wardrobe?.equipped;

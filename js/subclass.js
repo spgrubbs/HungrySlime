@@ -115,6 +115,22 @@ export const SUBCLASSES = {
       icon: "⚙️",
     },
   },
+  gourmetslime: {
+    id: "gourmetslime",
+    name: "Epicurean Ooze",
+    emoji: "🍽️",
+    desc: "A refined palate. Can rearrange stomach cells. Ferment speeds all digestion.",
+    color: "#6a5a3a",
+    passive: {
+      cellSwap: true,
+    },
+    ability: {
+      name: "Ferment",
+      desc: "Advance all digesting items by 50% of their remaining time.",
+      cooldown: 10,
+      icon: "🍽️",
+    },
+  },
 };
 
 export const SUBCLASS_KEYS = Object.keys(SUBCLASSES);
@@ -282,6 +298,26 @@ export function useAbility() {
       state.buffs.haste = (state.buffs.haste || 0) + 10;
       floatText("heal", "⚙️ HASTE", slimeEl);
       pushLog("Overclock! +10 ticks of haste");
+      break;
+    }
+    case "gourmetslime": {
+      let advanced = 0;
+      for (const cell of state.inventory) {
+        if (!cell.item) continue;
+        const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+        if (!kindCfg.digests) continue;
+        const remaining = cell.item.def.digestTime - cell.item.digestProgress;
+        if (remaining > 0) {
+          cell.item.digestProgress += remaining * 0.5;
+          advanced++;
+        }
+      }
+      if (advanced === 0) {
+        pushLog("Nothing fermenting!");
+        return;
+      }
+      floatText("heal", "🍽️ FERMENT", slimeEl);
+      pushLog(`Fermented ${advanced} items!`);
       break;
     }
     default:

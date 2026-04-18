@@ -476,6 +476,22 @@ export function beginNewRun() {
   // generic extra cells now that the two zones are unified.
   const baseInventorySize = 6 + (mods.heldCells || 0) + (mods.stomachCells || 0);
   state.inventory = makeFreshInventory(baseInventorySize);
+  // Meta upgrades: convert the first N cells to holding pouches, and insert
+  // extra digest cells before the existing back-end digest sac.
+  if (mods.heldCells > 0) {
+    for (let i = 0; i < mods.heldCells && i < state.inventory.length; i++) {
+      state.inventory[i].kind = "holding";
+    }
+  }
+  if (mods.stomachCells > 0) {
+    let placed = 0;
+    for (let i = state.inventory.length - 2; i >= 0 && placed < mods.stomachCells; i--) {
+      if (state.inventory[i].kind === "none") {
+        state.inventory[i].kind = "digest";
+        placed++;
+      }
+    }
+  }
   state.selected = null;
   state.arrangeMode = false;
   state.buffs = {};

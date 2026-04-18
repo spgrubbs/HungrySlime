@@ -13,11 +13,13 @@ Place files in the corresponding subdirectory. The game will reference them via
 | `slime-default.png` | Default green slime (idle) |
 | `slime-hurt.png` | Damage flash frame |
 | `slime-eat.png` | Eating/pickup animation frame |
-| `slime-stoneslime.png` | Stoneslime subclass |
-| `slime-spitslime.png` | Spitslime subclass |
-| `slime-cauldronslime.png` | Cauldronslime subclass |
-| `slime-sparkslime.png` | Sparkslime subclass |
-| `slime-acidslime.png` | Acidslime subclass |
+| `slime-stoneslime.png` | Petrified Ooze subclass (mineral encrusted) |
+| `slime-spitslime.png` | Thornspitter subclass (green, thorned) |
+| `slime-cauldronslime.png` | Alchemical Gel subclass (purple crucible) |
+| `slime-sparkslime.png` | Ember Jelly subclass (fiery veins) |
+| `slime-acidslime.png` | Corrosive Mass subclass (bright green, dripping) |
+| `slime-cogslime.png` | Cogwork Symbiote subclass (gears visible inside) |
+| `slime-gourmetslime.png` | Epicurean Ooze subclass (refined, plated look) |
 
 ---
 
@@ -25,27 +27,41 @@ Place files in the corresponding subdirectory. The game will reference them via
 
 | File | Description |
 |------|-------------|
-| `green-blob.png` | Green Blob (basic enemy) |
-| `skeleton.png` | Skeleton |
-| `fire-imp.png` | Fire Imp |
-| `stone-golem.png` | Stone Golem |
-| `mimic-disguised.png` | Mimic (looks like a gift box) |
-| `mimic-revealed.png` | Mimic (true form) |
-| `rat-swarm.png` | Rat Swarm |
-| `killer-bee.png` | Killer Bee (chaser) |
-| `treasure-goblin.png` | Treasure Goblin (fleer) |
-| `serpent.png` | Serpent (lane-switcher) |
+| `moss-crawler.png` | Moss Crawler (basic bug, mossy) |
+| `rust-beetle.png` | Rust Beetle (corroded carapace) |
+| `gear-spider.png` | Gear Spider (clockwork arachnid) |
+| `ember-wisp.png` | Ember Wisp (floating flame) |
+| `overgrown-golem.png` | Overgrown Golem (stone + vines) |
+| `thorn-mimic.png` | Thorn Mimic — disguised (looks like a gift box) |
+| `thorn-mimic-revealed.png` | Thorn Mimic — true form |
+| `spore-swarm.png` | Spore Swarm (cluster of mushrooms) |
+| `hornet.png` | Ironwood Hornet (chaser, metallic wings) |
+| `gilded-squirrel.png` | Gilded Squirrel (fleer, gold-coated) |
+| `vine-serpent.png` | Vine Serpent (lane-switcher, plant snake) |
+| `clockwork-sentry.png` | Clockwork Sentry (robot guard) |
+| `bark-golem.png` | Bark Golem (tree-like hulk) |
 
-### Bosses — 64x64px
+### Terminus Elites (levels 1-9) — 64x64px
 
 | File | Description |
 |------|-------------|
-| `bloated-blob.png` | Level 1 boss |
-| `bone-knight.png` | Level 2 boss |
-| `ember-drake.png` | Level 3 boss |
-| `ancient-golem.png` | Level 4 boss |
-| `gelatinous-king.png` | Level 5 boss |
-| `gelatinous-king-split.png` | King's Copy (phase 2) |
+| `bloated-mosslord.png` | Level 1 — Bloated Mosslord |
+| `cogwork-centipede.png` | Level 2 — Cogwork Centipede |
+| `ember-stag.png` | Level 3 — Ember Stag |
+| `rootbound-titan.png` | Level 4 — Rootbound Titan |
+| `furnace-drake.png` | Level 5 — Furnace Drake |
+| `crystal-tortoise.png` | Level 6 — Crystal Tortoise |
+| `mycelium-horror.png` | Level 7 — Mycelium Horror |
+| `siege-automaton.png` | Level 8 — Siege Automaton |
+| `ancient-treant.png` | Level 9 — Ancient Treant |
+
+### Final Boss — 80x80px
+
+| File | Description |
+|------|-------------|
+| `gelatinous-sovereign.png` | The Gelatinous Sovereign (phase 1) |
+| `gelatinous-sovereign-split.png` | King's Copy (phase 2) |
+| `gelatinous-sovereign-rage.png` | Enraged form (phase 3) |
 
 ---
 
@@ -54,41 +70,44 @@ Place files in the corresponding subdirectory. The game will reference them via
 ### Common
 | File | Description |
 |------|-------------|
-| `rusty-sword.png` | Rusty Sword |
-| `healing-herb.png` | Healing Herb |
-| `gold-nugget.png` | Gold Nugget |
-| `slime-jelly.png` | Slime Jelly |
+| `thorn-branch.png` | Thorn Branch (barbed vine) |
+| `mossbloom.png` | Mossbloom (regenerative moss) |
+| `amber-chunk.png` | Amber Chunk (fossilized resin) |
+| `slime-jelly.png` | Slime Jelly (proto-slime nodule) |
+| `gear-scrap.png` | Gear Scrap (bent cogs) |
 
 ### Uncommon
 | File | Description |
 |------|-------------|
-| `flame-core.png` | Flame Core |
-| `shield-fragment.png` | Shield Fragment |
-| `bomb.png` | Bomb |
-| `toxic-mushroom.png` | Toxic Mushroom |
-| `speed-berry.png` | Speed Berry |
-| `acid-vial.png` | Acid Vial |
-| `sticky-resin.png` | Sticky Resin |
+| `magma-geode.png` | Magma Geode (cracked, glowing) |
+| `clockwork-plate.png` | Clockwork Plate (automaton armor) |
+| `spore-bomb.png` | Spore Bomb (bloated fungal pod) |
+| `deathcap.png` | Deathcap (iridescent mushroom) |
+| `quickvine-berry.png` | Quickvine Berry (pulsing sap) |
+| `digestive-enzyme.png` | Digestive Enzyme (slime extract) |
+| `pine-resin.png` | Pine Resin (oozing amber) |
+| `mainspring-coil.png` | Mainspring Coil (wound tight) |
 
 ### Rare
 | File | Description |
 |------|-------------|
-| `iron-blade.png` | Iron Blade |
-| `venom-gland.png` | Venom Gland |
-| `frost-shard.png` | Frost Shard |
-| `life-root.png` | Life Root |
-| `golden-idol.png` | Golden Idol |
-| `fire-bomb.png` | Fire Bomb |
-| `thorned-hide.png` | Thorned Hide |
-| `slime-mold.png` | Slime Mold |
+| `vine-whip.png` | Vine Whip (living tendril) |
+| `venom-gland.png` | Venom Gland (caustic organ) |
+| `frost-rimed-bark.png` | Frost-Rimed Bark (frozen wood) |
+| `heartroot.png` | Heartroot (pulsing root) |
+| `gilded-gear.png` | Gilded Gear (gold-leafed flywheel) |
+| `volatile-pod.png` | Volatile Pod (primed seedpod) |
+| `thorned-carapace.png` | Thorned Carapace (spiked shell) |
+| `mycelial-mass.png` | Mycelial Mass (expanding fungal network) |
+| `automaton-core.png` | Automaton Core (still-warm heart) |
 
 ### Legendary
 | File | Description |
 |------|-------------|
-| `crystal-heart.png` | Crystal Heart |
-| `inferno-blade.png` | Inferno Blade |
-| `phoenix-feather.png` | Phoenix Feather |
-| `void-gem.png` | Void Gem |
+| `heartstone.png` | Heartstone (living geode) |
+| `worldtree-branch.png` | Worldtree Branch (primordial wood) |
+| `spore-phoenix.png` | Spore Phoenix (regenerating bloom) |
+| `epoch-gear.png` | Epoch Gear (titan's master-gear) |
 
 ---
 
@@ -96,9 +115,9 @@ Place files in the corresponding subdirectory. The game will reference them via
 
 | File | Description |
 |------|-------------|
-| `rock.png` | Rock |
-| `spikes.png` | Spikes |
-| `boulder.png` | Boulder (blocking) |
+| `rock.png` | Rock (mossy stone) |
+| `spikes.png` | Spikes (rusted metal barbs) |
+| `boulder.png` | Boulder (blocking, vine-covered) |
 
 ---
 
@@ -106,13 +125,13 @@ Place files in the corresponding subdirectory. The game will reference them via
 
 | File | Description |
 |------|-------------|
-| `fountain.png` | Healing Fountain |
-| `shop.png` | Shop stall |
-| `shrine.png` | Blessing Shrine |
-| `merchant.png` | Merchant Caravan |
-| `pool.png` | Mysterious Pool |
-| `elder.png` | Slime Elder |
-| `evolution-pool.png` | Evolution Pool |
+| `fountain.png` | Healing Fountain (overgrown) |
+| `shop.png` | Shop stall (tinker's cart) |
+| `shrine.png` | Blessing Shrine (natural stone) |
+| `merchant.png` | Merchant Caravan (mossy wagon) |
+| `pool.png` | Mysterious Pool (glowing water) |
+| `elder.png` | Slime Elder (ancient, wise slime) |
+| `evolution-pool.png` | Evolution Pool (mutagenic glow) |
 
 ---
 
@@ -120,13 +139,13 @@ Place files in the corresponding subdirectory. The game will reference them via
 
 | File | Size | Description |
 |------|------|-------------|
-| `hub-background.png` | 400x600 | Village background |
+| `hub-background.png` | 400x600 | Village background (overgrown clockwork ruins) |
 | `hub-slime.png` | 96x96 | Hub idle slime (larger than in-game) |
-| `building-adventure.png` | 80x80 | Begin Adventure building |
-| `building-upgrade-lab.png` | 80x80 | Upgrade Lab building |
-| `building-mutation-lab.png` | 80x80 | Mutation Lab building |
-| `building-codex.png` | 80x80 | Slime Codex building |
-| `building-wardrobe.png` | 80x80 | Wardrobe building |
+| `building-adventure.png` | 80x80 | Begin Adventure (vine-covered archway) |
+| `building-upgrade-lab.png` | 80x80 | Upgrade Lab (bubbling vats) |
+| `building-mutation-lab.png` | 80x80 | Mutation Lab (bioluminescent chamber) |
+| `building-codex.png` | 80x80 | Slime Codex (old clockwork book) |
+| `building-wardrobe.png` | 80x80 | Wardrobe (mirror with hanging skins) |
 
 ---
 
@@ -135,7 +154,7 @@ Place files in the corresponding subdirectory. The game will reference them via
 | File | Size | Description |
 |------|------|-------------|
 | `hud-bg.png` | 400x48 | HUD bar background |
-| `hp-bar-fill.png` | 4x16 tileable | HP bar fill (red gradient) |
+| `hp-bar-fill.png` | 4x16 tileable | HP bar fill (green gradient) |
 | `hp-bar-empty.png` | 4x16 tileable | HP bar empty background |
 | `btn-up.png` | 44x38 | Lane up button |
 | `btn-down.png` | 44x38 | Lane down button |
@@ -146,7 +165,7 @@ Place files in the corresponding subdirectory. The game will reference them via
 | `inventory-cell-fast.png` | 48x48 | Hyper vacuole cell |
 | `inventory-cell-acid.png` | 48x48 | Acid sac cell |
 | `inventory-cell-holding.png` | 48x48 | Holding pouch cell |
-| `lane-bg.png` | 400x(1/3 viewport) | Lane background (3 needed, or 1 tileable) |
+| `lane-bg.png` | 400x(1/3 viewport) | Lane background (overgrown treadmill) |
 | `modal-bg.9.png` | 9-slice | Modal card background |
 | `logo.png` | 280x80 | SLIMEVENTURE title logo |
 
@@ -156,15 +175,17 @@ Place files in the corresponding subdirectory. The game will reference them via
 
 | File | Description |
 |------|-------------|
-| `projectile-spit.png` | Spitslime projectile trail |
-| `explosion.png` | Bomb/fire explosion |
+| `projectile-spit.png` | Thornspitter projectile trail |
+| `explosion.png` | Spore bomb / fire explosion |
 | `heal-sparkle.png` | Healing effect |
 | `shield-bubble.png` | Shield activation |
 | `poison-cloud.png` | Poison coat effect |
-| `fire-aura.png` | Burn aura effect |
+| `fire-aura.png` | Burn aura / Ember Jelly eruption |
 | `digest-swirl.png` | Digestion progress ring |
 | `gold-pop.png` | Gold earned pop |
 | `level-up-glow.png` | Level complete flash |
+| `ferment-bubble.png` | Epicurean Ooze ferment effect |
+| `overclock-spark.png` | Cogwork Symbiote overclock effect |
 
 ---
 
@@ -172,13 +193,17 @@ Place files in the corresponding subdirectory. The game will reference them via
 
 | File | Description |
 |------|-------------|
-| `skin-blue.png` | Blue slime |
-| `skin-red.png` | Red/lava slime |
-| `skin-purple.png` | Void slime |
-| `skin-gold.png` | Golden slime |
-| `skin-crystal.png` | Crystal slime |
-| `skin-shadow.png` | Shadow slime |
-| `skin-rainbow.png` | Rainbow slime |
+| `skin-default.png` | Classic Slime (green) |
+| `skin-moss.png` | Mosscloak (draped in ferns) |
+| `skin-amber.png` | Amber Heart (golden resin) |
+| `skin-clockwork.png` | Cogslime (gears visible) |
+| `skin-mycelium.png` | Sporeling (bioluminescent threads) |
+| `skin-frost.png` | Frostbloom (pale blue, frozen dew) |
+| `skin-magma.png` | Cinder Gel (molten veins) |
+| `skin-void.png` | Nullslime (translucent purple, stars inside) |
+| `skin-bark.png` | Barkbound (living wood casing) |
+| `skin-gilded.png` | Gilded Ooze (gold-leafed) |
+| `skin-crystal.png` | Prism Jelly (refracting light) |
 
 ---
 
@@ -190,14 +215,14 @@ Place files in the corresponding subdirectory. The game will reference them via
 | `node-combat.png` | Combat node |
 | `node-treasure.png` | Treasure node |
 | `node-event.png` | Event node |
-| `node-elite.png` | Elite node |
+| `node-dangerous.png` | Dangerous node (was "elite") |
 | `node-boss.png` | Boss node |
 | `node-elder.png` | Elder node |
 | `node-evolution.png` | Evolution Pool node |
 
 ---
 
-**Total: ~95 assets**
+**Total: ~110 assets**
 
 When sprites are ready, the game's rendering code can be updated to use
 `<img>` elements or CSS `background-image` instead of emoji text. Each entity's

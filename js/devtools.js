@@ -1,9 +1,11 @@
 // SlimeVenture — Dev Tools
 // Toggleable panel for speed control, god mode, level skipping,
-// item/enemy spawning, and live state inspection.
+// item/enemy spawning, subclass/mutation control, and live state inspection.
 // Activate with the ` (backtick) key or the ⚙ button in the top-right.
 
 import { ITEMS, ENEMIES } from "./data.js";
+import { SUBCLASS_KEYS, SUBCLASSES } from "./subclass.js";
+import { MUTATION_KEYS, MUTATIONS } from "./mutations.js";
 
 export function initDevTools(api) {
   const {
@@ -20,12 +22,17 @@ export function initDevTools(api) {
     showBanner,
     onLevelComplete,
     spawnTerminus,
+    openOverworld,
     advanceToNode,
     rerollMap,
     openMetaMenu,
+    openMutationLab,
+    openWardrobe,
     goToHub,
     grantMetaXp,
     resetMeta,
+    applySubclass,
+    addMutation,
     COLS,
     levelTickLength,
     MAX_LEVEL,
@@ -42,14 +49,20 @@ export function initDevTools(api) {
       const wasPaused = state.paused;
       state.paused = false;
       tick();
-      // If tick() opened a modal (level complete, fountain, etc.) it will
-      // have set paused=true itself — respect that. Otherwise restore.
       if (!state.paused) state.paused = wasPaused;
       updatePauseBtn();
       renderAll();
     },
     addGold(n) {
       state.gold += n;
+      renderAll();
+    },
+    addScrap(n) {
+      state.scrap = (state.scrap || 0) + n;
+      renderAll();
+    },
+    addMana(n) {
+      state.mana = (state.mana || 0) + n;
       renderAll();
     },
     fullHeal() {
@@ -63,7 +76,6 @@ export function initDevTools(api) {
     spawnEnemyInLane(key) {
       const def = ENEMIES[key];
       if (!def) return;
-      // Find rightmost empty column in slime's current lane
       let col = COLS - 1;
       while (
         col > 0 &&
@@ -91,7 +103,6 @@ export function initDevTools(api) {
       }
     },
     skipToTerminus() {
-      // Sweep path of non-terminus entities; force terminus to spawn now.
       state.entities = state.entities.filter((e) => e.type === "terminus");
       if (!state.terminusSpawned) {
         state.levelTicks = levelTickLength();
@@ -100,23 +111,15 @@ export function initDevTools(api) {
       renderAll();
     },
     skipLevel() {
-      // Walk a random outgoing edge in the run map.
-      const node = state.map?.[state.mapNode.row]?.[state.mapNode.col];
-      if (!node) return;
-      const next = [...node.edges]
-        .map((c) => state.map[node.row + 1] && state.map[node.row + 1][c])
-        .filter(Boolean);
-      if (next.length === 0) {
-        // Boss row — fake a kill so the run-complete modal shows.
-        state.terminusDefeated = true;
-        onLevelComplete();
-        return;
-      }
-      const target = next[Math.floor(Math.random() * next.length)];
-      advanceToNode(target);
+      // Mark level complete and go to overworld for manual node selection.
+      state.entities = [];
+      state.terminusDefeated = true;
+      state.running = false;
+      state.paused = true;
+      state.runStats.levelsCompleted++;
+      openOverworld();
     },
     jumpToLevel(lvl) {
-      // Snap to the first active node in that row of the existing map.
       const targetRow = Math.max(0, Math.min(MAX_LEVEL - 1, (lvl | 0) - 1));
       const row = state.map && state.map[targetRow];
       if (!row) return;
@@ -129,6 +132,16 @@ export function initDevTools(api) {
     },
     resetRun() {
       restartRun();
+    },
+    chooseSubclass(key) {
+      if (!SUBCLASSES[key]) return;
+      applySubclass(key);
+      renderAll();
+    },
+    giveMutation(key) {
+      if (!MUTATIONS[key] || state.mutations.includes(key)) return;
+      addMutation(key);
+      renderAll();
     },
   };
 
@@ -146,6 +159,12 @@ export function initDevTools(api) {
   const panel = document.createElement("div");
   panel.id = "dev-panel";
   panel.className = "dev-panel hidden";
+
+  // Level selector options for 1-10.
+  const levelOpts = Array.from({ length: MAX_LEVEL }, (_, i) =>
+    `<option value="${i + 1}">Level ${i + 1}</option>`
+  ).join("");
+
   panel.innerHTML = `
     <div class="dev-header">
       <strong>DEV TOOLS</strong>
@@ -170,9 +189,13 @@ export function initDevTools(api) {
       <div class="dev-row">
         <button type="button" id="dev-god">God: OFF</button>
         <button type="button" id="dev-freegrow">Free Grow: OFF</button>
-        <button type="button" id="dev-gold">+100 🪙</button>
         <button type="button" id="dev-heal">Full HP</button>
         <button type="button" id="dev-reset">Reset Run</button>
+      </div>
+      <div class="dev-row">
+        <button type="button" id="dev-gold">+100 🪙</button>
+        <button type="button" id="dev-scrap">+50 🔩</button>
+        <button type="button" id="dev-mana">+50 🔮</button>
       </div>
     </div>
 
@@ -180,23 +203,17 @@ export function initDevTools(api) {
       <label>Level / Map</label>
       <div class="dev-row">
         <button type="button" id="dev-to-terminus">→ Terminus</button>
-        <button type="button" id="dev-skip">Skip Level</button>
+        <button type="button" id="dev-skip">Skip → Overworld</button>
         <button type="button" id="dev-reroll">Reroll Map</button>
       </div>
       <div class="dev-row">
-        <select id="dev-level-sel">
-          <option value="1">Level 1</option>
-          <option value="2">Level 2</option>
-          <option value="3">Level 3</option>
-          <option value="4">Level 4</option>
-          <option value="5">Level 5</option>
-        </select>
+        <select id="dev-level-sel">${levelOpts}</select>
         <button type="button" id="dev-jump">Jump to row</button>
       </div>
     </div>
 
     <div class="dev-section">
-      <label>Spawn Item (into inventory)</label>
+      <label>Spawn Item</label>
       <div class="dev-row">
         <select id="dev-item-sel"></select>
         <button type="button" id="dev-give-item">Give</button>
@@ -204,10 +221,22 @@ export function initDevTools(api) {
     </div>
 
     <div class="dev-section">
-      <label>Spawn Enemy (in slime's lane)</label>
+      <label>Spawn Enemy</label>
       <div class="dev-row">
         <select id="dev-enemy-sel"></select>
         <button type="button" id="dev-spawn-enemy">Spawn</button>
+      </div>
+    </div>
+
+    <div class="dev-section">
+      <label>Subclass / Mutations</label>
+      <div class="dev-row">
+        <select id="dev-subclass-sel"><option value="">— none —</option></select>
+        <button type="button" id="dev-set-subclass">Evolve</button>
+      </div>
+      <div class="dev-row">
+        <select id="dev-mutation-sel"></select>
+        <button type="button" id="dev-give-mutation">Give Mutation</button>
       </div>
     </div>
 
@@ -223,7 +252,11 @@ export function initDevTools(api) {
       <label>Meta / Hub</label>
       <div class="dev-row">
         <button type="button" id="dev-hub">→ Hub</button>
-        <button type="button" id="dev-meta-open">Open Lab</button>
+        <button type="button" id="dev-meta-open">Upgrade Lab</button>
+        <button type="button" id="dev-mut-lab">Mutation Lab</button>
+        <button type="button" id="dev-wardrobe">Wardrobe</button>
+      </div>
+      <div class="dev-row">
         <button type="button" id="dev-meta-xp">+50 XP</button>
         <button type="button" id="dev-meta-reset">Reset Meta</button>
       </div>
@@ -250,6 +283,22 @@ export function initDevTools(api) {
     opt.value = key;
     opt.textContent = `${en.emoji} ${en.name} (${en.hp}hp / ${en.attack}atk)`;
     enemySel.appendChild(opt);
+  }
+  const subclassSel = panel.querySelector("#dev-subclass-sel");
+  for (const key of SUBCLASS_KEYS) {
+    const def = SUBCLASSES[key];
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = `${def.emoji} ${def.name}`;
+    subclassSel.appendChild(opt);
+  }
+  const mutationSel = panel.querySelector("#dev-mutation-sel");
+  for (const key of MUTATION_KEYS) {
+    const def = MUTATIONS[key];
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = `${def.icon} ${def.name}`;
+    mutationSel.appendChild(opt);
   }
 
   // ---------- Toggle ----------
@@ -308,53 +357,42 @@ export function initDevTools(api) {
   const freeGrowBtn = panel.querySelector("#dev-freegrow");
   freeGrowBtn.addEventListener("click", () => {
     devState.freeGrowth = !devState.freeGrowth;
-    freeGrowBtn.textContent = `Free Grow: ${
-      devState.freeGrowth ? "ON" : "OFF"
-    }`;
+    freeGrowBtn.textContent = `Free Grow: ${devState.freeGrowth ? "ON" : "OFF"}`;
     freeGrowBtn.classList.toggle("on", devState.freeGrowth);
     renderAll();
   });
 
-  panel
-    .querySelector("#dev-gold")
-    .addEventListener("click", () => actions.addGold(100));
-  panel
-    .querySelector("#dev-heal")
-    .addEventListener("click", () => actions.fullHeal());
-  panel
-    .querySelector("#dev-reset")
-    .addEventListener("click", () => actions.resetRun());
+  panel.querySelector("#dev-gold").addEventListener("click", () => actions.addGold(100));
+  panel.querySelector("#dev-scrap").addEventListener("click", () => actions.addScrap(50));
+  panel.querySelector("#dev-mana").addEventListener("click", () => actions.addMana(50));
+  panel.querySelector("#dev-heal").addEventListener("click", () => actions.fullHeal());
+  panel.querySelector("#dev-reset").addEventListener("click", () => actions.resetRun());
 
   // Level
-  panel
-    .querySelector("#dev-to-terminus")
-    .addEventListener("click", () => actions.skipToTerminus());
-  panel
-    .querySelector("#dev-skip")
-    .addEventListener("click", () => actions.skipLevel());
+  panel.querySelector("#dev-to-terminus").addEventListener("click", () => actions.skipToTerminus());
+  panel.querySelector("#dev-skip").addEventListener("click", () => actions.skipLevel());
   panel.querySelector("#dev-jump").addEventListener("click", () => {
     const lvl = parseInt(panel.querySelector("#dev-level-sel").value, 10);
     actions.jumpToLevel(lvl);
   });
-  panel
-    .querySelector("#dev-reroll")
-    .addEventListener("click", () => actions.rerollMap());
+  panel.querySelector("#dev-reroll").addEventListener("click", () => actions.rerollMap());
 
   // Spawning
-  panel
-    .querySelector("#dev-give-item")
-    .addEventListener("click", () => actions.giveItem(itemSel.value));
-  panel
-    .querySelector("#dev-spawn-enemy")
-    .addEventListener("click", () => actions.spawnEnemyInLane(enemySel.value));
+  panel.querySelector("#dev-give-item").addEventListener("click", () => actions.giveItem(itemSel.value));
+  panel.querySelector("#dev-spawn-enemy").addEventListener("click", () => actions.spawnEnemyInLane(enemySel.value));
+
+  // Subclass / Mutations
+  panel.querySelector("#dev-set-subclass").addEventListener("click", () => {
+    const key = subclassSel.value;
+    if (key) actions.chooseSubclass(key);
+  });
+  panel.querySelector("#dev-give-mutation").addEventListener("click", () => {
+    actions.giveMutation(mutationSel.value);
+  });
 
   // World
-  panel
-    .querySelector("#dev-clear")
-    .addEventListener("click", () => actions.clearPath());
-  panel
-    .querySelector("#dev-killall")
-    .addEventListener("click", () => actions.killAllEnemies());
+  panel.querySelector("#dev-clear").addEventListener("click", () => actions.clearPath());
+  panel.querySelector("#dev-killall").addEventListener("click", () => actions.killAllEnemies());
 
   // Meta / Hub
   panel.querySelector("#dev-hub").addEventListener("click", () => {
@@ -364,6 +402,14 @@ export function initDevTools(api) {
   panel.querySelector("#dev-meta-open").addEventListener("click", () => {
     togglePanel(false);
     openMetaMenu();
+  });
+  panel.querySelector("#dev-mut-lab").addEventListener("click", () => {
+    togglePanel(false);
+    openMutationLab();
+  });
+  panel.querySelector("#dev-wardrobe").addEventListener("click", () => {
+    togglePanel(false);
+    openWardrobe();
   });
   panel.querySelector("#dev-meta-xp").addEventListener("click", () => {
     grantMetaXp(50);
@@ -387,16 +433,18 @@ export function initDevTools(api) {
     const node = state.map?.[state.mapNode.row]?.[state.mapNode.col];
     const nodeType = node ? node.type : "—";
     const lvlLen = levelTickLength();
+    const sc = state.subclass || "—";
+    const muts = state.mutations.length;
     infoEl.innerHTML = `
       <div>tick: <b>${state.tick}</b> · lv: <b>${state.level}</b> · lTicks: <b>${state.levelTicks}/${lvlLen}</b></div>
       <div>node: <b>${nodeType}</b> @ row <b>${state.mapNode.row}</b> col <b>${state.mapNode.col}</b></div>
       <div>hp: <b>${state.hp}/${effectiveMaxHp()}</b> · gold: <b>${state.gold}</b> · lane: <b>${state.lane}</b></div>
+      <div>🔩 <b>${state.scrap || 0}</b> · 🔮 <b>${state.mana || 0}</b> · subclass: <b>${sc}</b> · muts: <b>${muts}</b></div>
       <div>entities: <b>${state.entities.length}</b> · speed: <b>${speedMult}x</b> · paused: <b>${state.paused ? "yes" : "no"}</b></div>
       <div>god: <b>${devState.godMode ? "ON" : "OFF"}</b> · freeGrow: <b>${devState.freeGrowth ? "ON" : "OFF"}</b></div>
       <div>buffs: <b>${buffs}</b></div>
       <div>meta XP: <b>${state.meta?.availableXp ?? 0}</b> / lifetime <b>${state.meta?.totalXp ?? 0}</b> · unlocks <b>${state.meta ? Object.keys(state.meta.unlocks || {}).length : 0}</b></div>
     `;
   }
-  // Passive refresh so the inspector stays current without touching the tick loop.
   setInterval(updateInfo, 300);
 }

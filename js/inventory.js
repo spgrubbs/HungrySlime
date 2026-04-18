@@ -226,46 +226,34 @@ export function effectiveMaxHp() {
   return state.maxHp + maxHpBonus + (mut.maxHpBonus || 0);
 }
 
-// ---------- Inventory interactions (tap-to-select-then-place) ----------
-// Two interaction modes share the same selection state:
-//   default → tap any cell with an item to select it, tap another cell to
-//             swap items only (cell kinds stay put).
-//   arrange → tap any cell to select it, tap another to swap the entire cell
-//             (kind + item). Lets the player reposition stomachs they earned.
+// ---------- Inventory interactions ----------
+// Items are always hot-swappable: tap one cell, tap another to swap their
+// items. Cell kinds (stomach types) stay fixed — unless the player is an
+// Epicurean Ooze (gourmetslime), which can freely rearrange cell kinds too.
 export function onSlotClick(index) {
   const cell = state.inventory[index];
   if (!cell) return;
 
-  if (state.arrangeMode) {
-    if (!state.selected) {
-      state.selected = { index };
-    } else if (state.selected.index === index) {
-      state.selected = null;
-    } else {
-      const a = state.inventory[state.selected.index];
-      const b = cell;
-      // Swap the entire cell descriptor (kind + item).
-      state.inventory[state.selected.index] = b;
-      state.inventory[index] = a;
-      state.selected = null;
-    }
-    renderInventory();
-    updateHUD();
-    return;
-  }
+  const canSwapKinds = state.subclass === "gourmetslime";
 
-  // Default mode: tap to select (for discard). Items are locked in place.
   if (!state.selected) {
-    if (cell.item) state.selected = { index };
+    if (cell.item || canSwapKinds) {
+      state.selected = { index };
+    }
   } else if (state.selected.index === index) {
     state.selected = null;
   } else {
-    // Tap another cell = change selection (no swapping).
-    if (cell.item) {
-      state.selected = { index };
+    const a = state.inventory[state.selected.index];
+    const b = cell;
+    if (canSwapKinds) {
+      state.inventory[state.selected.index] = b;
+      state.inventory[index] = a;
     } else {
-      state.selected = null;
+      const tmp = a.item;
+      a.item = b.item;
+      b.item = tmp;
     }
+    state.selected = null;
   }
   renderInventory();
   updateHUD();
@@ -283,11 +271,8 @@ export function discardSelected() {
   updateHUD();
 }
 
-export function toggleArrangeMode() {
-  state.arrangeMode = !state.arrangeMode;
-  state.selected = null;
-  renderInventory();
-}
+// Kept as no-op for backwards compat with any callers.
+export function toggleArrangeMode() {}
 
 export function growCost() {
   if (devState.freeGrowth) return 0;
@@ -327,8 +312,7 @@ export function renderInventory() {
   growBtn.textContent = `🧪 Grow (${cost}🪙)`;
   growBtn.disabled = state.gold < cost;
   if (arrangeBtn) {
-    arrangeBtn.classList.toggle("on", state.arrangeMode);
-    arrangeBtn.textContent = state.arrangeMode ? "🔁 Arranging" : "🔁 Arrange";
+    arrangeBtn.classList.add("hidden");
   }
 }
 
@@ -354,7 +338,7 @@ function renderMutationStrip() {
 function renderInventoryZone() {
   if (!inventoryZoneEl) return;
   inventoryZoneEl.innerHTML = "";
-  inventoryZoneEl.classList.toggle("arrange-mode", state.arrangeMode);
+  inventoryZoneEl.classList.remove("arrange-mode");
 
   state.inventory.forEach((cell, idx) => {
     const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;

@@ -29,13 +29,18 @@ import {
   setScene,
   onLevelComplete,
   onNodeSelected,
+  openOverworld,
   restartRun,
   goToHub,
   renderHub,
   openMetaMenu,
+  openMutationLab,
+  openWardrobe,
+  addMutation,
 } from "./scenes.js";
 import { hookInput, hookHub, hookEventView } from "./input.js";
 import { initDevTools } from "./devtools.js";
+import { applySubclass } from "./subclass.js";
 
 function start() {
   hookInput();
@@ -62,6 +67,7 @@ function start() {
     showBanner,
     onLevelComplete,
     spawnTerminus,
+    openOverworld,
     advanceToNode: onNodeSelected,
     rerollMap: () => {
       state.map = generateRunMap();
@@ -78,6 +84,8 @@ function start() {
       showBanner("— Level 1: Start —");
     },
     openMetaMenu,
+    openMutationLab,
+    openWardrobe,
     goToHub,
     grantMetaXp: (amount) => {
       grantXp(state.meta, amount);
@@ -89,6 +97,8 @@ function start() {
       saveMeta(state.meta);
       renderHub();
     },
+    applySubclass,
+    addMutation,
     COLS,
     levelTickLength,
     MAX_LEVEL,

@@ -477,17 +477,19 @@ export const ENEMY_POOL_BY_LEVEL = {
   10: ["bark_golem", "clockwork_sentry", "thorn_mimic", "vine_serpent", "gilded_squirrel"],
 };
 
-/** Terminus enemies per level — themed bosses of each biome zone */
+/** Terminus enemies per level — slow scaling ramp.
+ *  Levels 1-9: "elites" — tough end-of-level foes that drop a rare item.
+ *  Level 10: the only true boss with phase mechanics. */
 export const TERMINI = {
-  1: { id: "t1", name: "Bloated Mosslord", emoji: "🫠", hp: 20, attack: 2, speed: 1, gold: 15, dropChance: 1, dropPool: ["magma_geode", "clockwork_plate"] },
-  2: { id: "t2", name: "Cogwork Centipede", emoji: "🐛", hp: 35, attack: 4, speed: 1, gold: 25, dropChance: 1, dropPool: ["spring_coil", "gear_scrap"] },
-  3: { id: "t3", name: "Ember Stag", emoji: "🦌", hp: 50, attack: 5, speed: 1, gold: 35, dropChance: 1, dropPool: ["magma_geode"] },
-  4: { id: "t4", name: "Rootbound Titan", emoji: "🌿", hp: 70, attack: 6, speed: 2, gold: 50, dropChance: 1, dropPool: ["life_root"] },
-  5: { id: "t5", name: "Furnace Drake", emoji: "🐉", hp: 65, attack: 6, speed: 1, gold: 40, dropChance: 1, dropPool: ["magma_geode", "volatile_pod"] },
-  6: { id: "t6", name: "Crystal Tortoise", emoji: "🐢", hp: 80, attack: 5, speed: 2, gold: 50, dropChance: 1, dropPool: ["frost_shard", "clockwork_plate"] },
-  7: { id: "t7", name: "Mycelium Horror", emoji: "🍄", hp: 55, attack: 8, speed: 1, gold: 55, dropChance: 1, dropPool: ["venom_gland"] },
-  8: { id: "t8", name: "Siege Automaton", emoji: "🤖", hp: 100, attack: 7, speed: 2, gold: 65, dropChance: 1, dropPool: ["automaton_core", "epoch_gear"] },
-  9: { id: "t9", name: "Ancient Treant", emoji: "🌳", hp: 90, attack: 9, speed: 1, gold: 80, dropChance: 1, dropPool: ["worldtree_branch"] },
+  1:  { id: "t1",  name: "Bloated Mosslord",       emoji: "🫠", hp: 8,   attack: 1, speed: 1, gold: 8,   dropChance: 1, dropPool: ["magma_geode", "clockwork_plate"] },
+  2:  { id: "t2",  name: "Cogwork Centipede",       emoji: "🐛", hp: 14,  attack: 2, speed: 1, gold: 12,  dropChance: 1, dropPool: ["spring_coil", "gear_scrap"] },
+  3:  { id: "t3",  name: "Ember Stag",              emoji: "🦌", hp: 22,  attack: 2, speed: 1, gold: 18,  dropChance: 1, dropPool: ["magma_geode", "vine_whip"] },
+  4:  { id: "t4",  name: "Rootbound Titan",         emoji: "🌿", hp: 30,  attack: 3, speed: 1, gold: 25,  dropChance: 1, dropPool: ["life_root", "thorned_carapace"] },
+  5:  { id: "t5",  name: "Furnace Drake",           emoji: "🐉", hp: 38,  attack: 3, speed: 1, gold: 30,  dropChance: 1, dropPool: ["magma_geode", "volatile_pod"] },
+  6:  { id: "t6",  name: "Crystal Tortoise",        emoji: "🐢", hp: 48,  attack: 4, speed: 1, gold: 38,  dropChance: 1, dropPool: ["frost_shard", "clockwork_plate"] },
+  7:  { id: "t7",  name: "Mycelium Horror",         emoji: "🍄", hp: 58,  attack: 5, speed: 1, gold: 45,  dropChance: 1, dropPool: ["venom_gland", "slime_mold"] },
+  8:  { id: "t8",  name: "Siege Automaton",          emoji: "🤖", hp: 70,  attack: 5, speed: 1, gold: 55,  dropChance: 1, dropPool: ["automaton_core", "epoch_gear"] },
+  9:  { id: "t9",  name: "Ancient Treant",           emoji: "🌳", hp: 85,  attack: 6, speed: 1, gold: 70,  dropChance: 1, dropPool: ["worldtree_branch"] },
   10: { id: "t10", name: "The Gelatinous Sovereign", emoji: "👑", hp: 120, attack: 8, speed: 1, gold: 150, dropChance: 1, dropPool: ["crystal_heart"], boss: true, phase: 1, absorbed: [] },
 };
 

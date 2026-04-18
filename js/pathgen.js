@@ -41,7 +41,7 @@ export function generateLevelSchedule() {
 
   // Adjust budget by node type: elite gets +40%, treasure gets -50%.
   const node = state.map && state.map[state.mapNode.row]?.[state.mapNode.col];
-  if (node?.type === "elite") budget = Math.round(budget * 1.4);
+  if (node?.type === "dangerous") budget = Math.round(budget * 1.4);
   else if (node?.type === "treasure") budget = Math.round(budget * 0.5);
   else if (node?.type === "event") budget = Math.round(budget * 0.6);
 

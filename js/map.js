@@ -40,9 +40,9 @@ export const NODE_TYPES = {
     spawnWeights: { enemy: 0.30, item: 0.20, obstacle: 0.10, location: 0.40 },
     tickLength: 36,
   },
-  elite: {
-    label: "Elite",
-    emoji: "⭐",
+  dangerous: {
+    label: "Dangerous",
+    emoji: "⚠️",
     color: "#bb6bd9",
     spawnWeights: { enemy: 0.60, item: 0.20, obstacle: 0.15, location: 0.05 },
     tickLength: 46,
@@ -74,7 +74,7 @@ export const NODE_TYPES = {
 const ROW_WIDTHS = [1, 3, 3, 3, 3, 3, 3, 3, 3, 1];
 const NUM_PATHS = 5;
 const MIDDLE_TYPE_BAG = ["combat", "combat", "combat", "treasure", "event", "elder"];
-const PRE_BOSS_TYPE_BAG = ["combat", "elite", "elite", "event", "treasure"];
+const PRE_BOSS_TYPE_BAG = ["combat", "dangerous", "dangerous", "event", "treasure"];
 export const EVOLUTION_ROW = 5;
 
 function rand(n) {
@@ -147,17 +147,17 @@ export function generateRunMap() {
   let hasElite = false;
   for (let r = 1; r < rows - 1; r++) {
     for (const n of grid[r]) {
-      if (n.active && n.type === "elite") hasElite = true;
+      if (n.active && n.type === "dangerous") hasElite = true;
     }
   }
   if (!hasElite) {
     const candidates = [];
     for (let r = 1; r < rows - 1; r++) {
       for (const n of grid[r]) {
-        if (n.active && n.type !== "elite") candidates.push(n);
+        if (n.active && n.type !== "dangerous") candidates.push(n);
       }
     }
-    if (candidates.length > 0) pick(candidates).type = "elite";
+    if (candidates.length > 0) pick(candidates).type = "dangerous";
   }
 
   return grid;
