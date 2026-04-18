@@ -38,6 +38,7 @@ import {
   pushLog,
 } from "./ui.js";
 import { generateLevelSchedule } from "./pathgen.js";
+import { SUBCLASSES, rollSubclassChoices, applySubclass } from "./subclass.js";
 
 // ---------- DOM refs ----------
 const overworldMapEl = $("overworld-map");
@@ -110,6 +111,14 @@ export function onNodeSelected(node) {
   state.terminusSpawned = false;
   state.terminusDefeated = false;
   state.entities = [];
+
+  // Guaranteed Evolution Pool: before the player's first combat of row 1+,
+  // if they haven't picked a subclass yet, offer the evolution pool.
+  if (!state.subclass && !state.evolutionOffered && state.level >= 2) {
+    state.evolutionOffered = true;
+    enterEvolutionPool(node);
+    return;
+  }
 
   // Different node types dispatch to different scenes.
   if (node.type === "event") {
@@ -232,6 +241,56 @@ function resolveEventChoice(event, choice) {
   };
 }
 
+// ---------- Evolution Pool (subclass pick) ----------
+function enterEvolutionPool(pendingNode) {
+  setScene("event");
+  state.paused = true;
+  state.running = false;
+  updatePauseBtn();
+
+  const choices = rollSubclassChoices();
+
+  eventTitleEl.textContent = "🧬 Evolution Pool";
+  eventTextEl.textContent =
+    "A luminous pool pulses with mutagenic energy. Step inside and feel your body reshape...";
+  eventChoicesEl.innerHTML = "";
+  eventResultEl.classList.add("hidden");
+  eventContinueBtn.classList.add("hidden");
+
+  for (const key of choices) {
+    const def = SUBCLASSES[key];
+    const btn = document.createElement("button");
+    btn.className = "event-choice mutation-choice";
+    btn.type = "button";
+    btn.innerHTML = `<span class="mc-icon">${def.emoji}</span><span class="mc-name">${def.name}</span><span class="mc-desc">${def.desc}</span>`;
+    btn.addEventListener("click", () => {
+      applySubclass(key);
+      eventResultEl.textContent = `You emerge from the pool as a ${def.name}!`;
+      eventResultEl.classList.remove("hidden");
+      for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
+      eventContinueBtn.classList.remove("hidden");
+      eventContinueBtn.textContent = "Continue ▶";
+      eventContinueBtn.onclick = () => {
+        // Now proceed to the node they originally selected.
+        proceedToNode(pendingNode);
+      };
+      renderInventory();
+      updateHUD();
+    });
+    eventChoicesEl.appendChild(btn);
+  }
+}
+
+function proceedToNode(node) {
+  if (node.type === "event") {
+    enterEventScene(rollEvent());
+  } else if (node.type === "treasure") {
+    enterTreasureScene();
+  } else {
+    enterRunScene();
+  }
+}
+
 // ---------- Treasure scene (mutation pick) ----------
 function enterTreasureScene() {
   setScene("event");
@@ -342,6 +401,8 @@ export function beginNewRun() {
   state.maxHp = 20 + (mods.maxHpBonus || 0);
   state.hp = state.maxHp;
   state.gold = mods.startGold || 0;
+  state.scrap = 0;
+  state.mana = 0;
   state.lane = 1;
   state.level = 1;
   state.levelTicks = 0;
@@ -363,6 +424,9 @@ export function beginNewRun() {
   state.regenCounter = 0;
   state.passiveCounter = 0;
   state.growthLevel = 0;
+  state.subclass = null;
+  state.abilityCooldown = 0;
+  state.evolutionOffered = false;
   state.mutations = [];
   refreshMutationBonuses();
   state.runStats = {

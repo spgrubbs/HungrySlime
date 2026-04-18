@@ -20,6 +20,7 @@ import {
   openMetaMenu,
   openPlaceholder,
 } from "./scenes.js";
+import { useAbility, SUBCLASSES } from "./subclass.js";
 
 // ---------- DOM refs ----------
 const slimeEl = $("slime");
@@ -30,6 +31,7 @@ const growBtn = $("grow-btn");
 const discardBtn = $("discard-btn");
 const arrangeBtn = $("arrange-btn");
 const eventContinueBtn = $("event-continue");
+const abilityBtn = $("ability-btn");
 
 // ---------- Lane + pause ----------
 function applyLaneRegen() {
@@ -79,11 +81,17 @@ function onPause() {
   updatePauseBtn();
 }
 
+function onAbility() {
+  if (state.scene !== "run" || !state.subclass) return;
+  useAbility();
+}
+
 // ---------- Hookups ----------
 export function hookInput() {
   laneUpBtn.addEventListener("click", onLaneUp);
   laneDownBtn.addEventListener("click", onLaneDown);
   pauseBtn.addEventListener("click", onPause);
+  if (abilityBtn) abilityBtn.addEventListener("click", onAbility);
   growBtn.addEventListener("click", growSlime);
   discardBtn.addEventListener("click", discardSelected);
   if (arrangeBtn) arrangeBtn.addEventListener("click", toggleArrangeMode);
@@ -94,6 +102,8 @@ export function hookInput() {
     else if (e.key === " " || e.key === "p") {
       e.preventDefault();
       onPause();
+    } else if (e.key === "e" || e.key === "q") {
+      onAbility();
     }
   });
 }

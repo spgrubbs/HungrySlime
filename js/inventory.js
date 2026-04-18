@@ -188,6 +188,18 @@ export function applyDigest(item, yieldMult = 1) {
       pushLog(`Gained buff: ${d.buff}`);
     }
   }
+  // Secondary resources from item tags.
+  const tags = item.def.tags || [];
+  if (tags.includes("metal")) {
+    const scrapAmt = Math.ceil(2 * yieldMult);
+    state.scrap = (state.scrap || 0) + scrapAmt;
+    pushLog(`+${scrapAmt} scrap`);
+  }
+  if (tags.includes("elemental")) {
+    const manaAmt = Math.ceil(2 * yieldMult);
+    state.mana = (state.mana || 0) + manaAmt;
+    pushLog(`+${manaAmt} mana`);
+  }
   if (d.enemyDamage) {
     // Enemies now stop one column to the right of the slime, so the bomb
     // looks one cell ahead instead of on top of the slime.
@@ -240,22 +252,16 @@ export function onSlotClick(index) {
     return;
   }
 
-  // Default mode: swap items between cells.
+  // Default mode: tap to select (for discard). Items are locked in place.
   if (!state.selected) {
     if (cell.item) state.selected = { index };
+  } else if (state.selected.index === index) {
+    state.selected = null;
   } else {
-    const src = state.inventory[state.selected.index];
-    if (state.selected.index === index) {
-      state.selected = null;
+    // Tap another cell = change selection (no swapping).
+    if (cell.item) {
+      state.selected = { index };
     } else {
-      const tmp = cell.item;
-      cell.item = src.item;
-      src.item = tmp;
-      // Reset digest progress on items that just entered a digesting cell.
-      const dstKind = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
-      const srcKind = STOMACH_KINDS[src.kind] || STOMACH_KINDS.none;
-      if (dstKind.digests && cell.item) cell.item.digestProgress = 0;
-      if (srcKind.digests && src.item) src.item.digestProgress = 0;
       state.selected = null;
     }
   }
