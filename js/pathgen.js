@@ -21,6 +21,11 @@ const DIFFICULTY_BY_LEVEL = {
   3: 30,
   4: 42,
   5: 55,
+  6: 60,
+  7: 68,
+  8: 78,
+  9: 88,
+  10: 100,
 };
 
 const LOCATION_KEYS = ["fountain", "shop", "shrine", "merchant"];
@@ -63,12 +68,11 @@ export function generateLevelSchedule() {
     usedSlots.add(slotKey(tick, lane));
     const locRoll = Math.random();
     let locKey;
-    if (locRoll < 0.25) locKey = "fountain";
-    else if (locRoll < 0.45) locKey = "shop";
-    else if (locRoll < 0.6) locKey = "shrine";
-    else if (locRoll < 0.75) locKey = "merchant";
-    else if (locRoll < 0.88) locKey = "pool";
-    else locKey = "elder";
+    if (locRoll < 0.3) locKey = "fountain";
+    else if (locRoll < 0.5) locKey = "shop";
+    else if (locRoll < 0.7) locKey = "shrine";
+    else if (locRoll < 0.85) locKey = "merchant";
+    else locKey = "pool";
     schedule.push({ tick, lane, type: "location", locKey });
   }
 
@@ -123,7 +127,7 @@ export function generateLevelSchedule() {
 
   // 3. Scatter free items based on item weight. More items in treasure nodes.
   const itemRatio = w.item / (w.enemy + w.item + w.obstacle + w.location);
-  const numItems = Math.round(totalTicks * 0.3 * itemRatio) + 2;
+  const numItems = Math.round(totalTicks * 0.375 * itemRatio) + 2;
   for (let i = 0; i < numItems; i++) {
     const tick = 1 + rand(totalTicks - 2);
     const lane = findFreeLane(tick);

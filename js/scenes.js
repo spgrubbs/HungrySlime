@@ -6,9 +6,10 @@ import {
   STOMACH_KINDS,
   rollMutationChoices,
   getMutationBonuses,
+  MUTATION_KEYS,
 } from "./mutations.js";
 import { EVENTS, rollEvent } from "./events.js";
-import { generateRunMap, renderMapSVG, NODE_TYPES } from "./map.js";
+import { generateRunMap, renderMapSVG, NODE_TYPES, EVOLUTION_ROW } from "./map.js";
 import {
   UPGRADES,
   TIER_THRESHOLDS,
@@ -112,15 +113,14 @@ export function onNodeSelected(node) {
   state.terminusDefeated = false;
   state.entities = [];
 
-  // Guaranteed Evolution Pool: before the player's first combat of row 1+,
-  // if they haven't picked a subclass yet, offer the evolution pool.
-  if (!state.subclass && !state.evolutionOffered && state.level >= 2) {
-    state.evolutionOffered = true;
-    enterEvolutionPool(node);
+  if (node.type === "evolution") {
+    enterEvolutionPool(null);
     return;
   }
-
-  // Different node types dispatch to different scenes.
+  if (node.type === "elder") {
+    enterElderScene();
+    return;
+  }
   if (node.type === "event") {
     enterEventScene(rollEvent());
     return;
@@ -129,7 +129,7 @@ export function onNodeSelected(node) {
     enterTreasureScene();
     return;
   }
-  // combat / elite / boss → live run.
+  // combat / elite / boss / start → live run.
   enterRunScene();
 }
 
@@ -241,8 +241,8 @@ function resolveEventChoice(event, choice) {
   };
 }
 
-// ---------- Evolution Pool (subclass pick) ----------
-function enterEvolutionPool(pendingNode) {
+// ---------- Evolution Pool (subclass pick, overworld node) ----------
+function enterEvolutionPool() {
   setScene("event");
   state.paused = true;
   state.running = false;
@@ -270,25 +270,85 @@ function enterEvolutionPool(pendingNode) {
       for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
       eventContinueBtn.classList.remove("hidden");
       eventContinueBtn.textContent = "Continue ▶";
-      eventContinueBtn.onclick = () => {
-        // Now proceed to the node they originally selected.
-        proceedToNode(pendingNode);
-      };
+      eventContinueBtn.onclick = () => openOverworld();
       renderInventory();
       updateHUD();
     });
     eventChoicesEl.appendChild(btn);
   }
+
+  // Allow skipping.
+  const skip = document.createElement("button");
+  skip.className = "event-choice subtle";
+  skip.type = "button";
+  skip.textContent = "Walk past the pool";
+  skip.addEventListener("click", () => openOverworld());
+  eventChoicesEl.appendChild(skip);
 }
 
-function proceedToNode(node) {
-  if (node.type === "event") {
-    enterEventScene(rollEvent());
-  } else if (node.type === "treasure") {
-    enterTreasureScene();
-  } else {
-    enterRunScene();
+// ---------- Elder scene (overworld node) ----------
+function enterElderScene() {
+  setScene("event");
+  state.paused = true;
+  state.running = false;
+  updatePauseBtn();
+
+  const CONVERT_OPTIONS = [
+    { from: "none", to: "digest", label: "Add Digestive Sac", desc: "Convert an inert cell into a digesting cell" },
+    { from: "none", to: "holding", label: "Add Holding Pouch", desc: "Convert an inert cell into a holding cell" },
+    { from: "digest", to: "fast", label: "Upgrade to Fast Stomach", desc: "Upgrade a digest cell to fast (1.5x speed)" },
+    { from: "digest", to: "acid", label: "Upgrade to Acid Sac", desc: "Upgrade a digest cell to acid (2x yield)" },
+  ];
+
+  const available = CONVERT_OPTIONS.filter((opt) =>
+    state.inventory.some((c) => c.kind === opt.from)
+  );
+
+  eventTitleEl.textContent = "🧙 Slime Elder";
+  eventChoicesEl.innerHTML = "";
+  eventResultEl.classList.add("hidden");
+  eventContinueBtn.classList.add("hidden");
+
+  if (available.length === 0) {
+    eventTextEl.textContent = "The Elder studies you, but sees no cells to transform.";
+    eventContinueBtn.classList.remove("hidden");
+    eventContinueBtn.textContent = "Continue ▶";
+    eventContinueBtn.onclick = () => openOverworld();
+    return;
   }
+
+  eventTextEl.textContent = "An ancient slime offers to reshape one of your cells...";
+
+  for (const opt of available) {
+    const toKind = STOMACH_KINDS[opt.to] || STOMACH_KINDS.none;
+    const btn = document.createElement("button");
+    btn.className = "event-choice mutation-choice";
+    btn.type = "button";
+    btn.innerHTML = `<span class="mc-icon">${toKind.icon}</span><span class="mc-name">${opt.label}</span><span class="mc-desc">${opt.desc}</span>`;
+    btn.addEventListener("click", () => {
+      const idx = state.inventory.findIndex((c) => c.kind === opt.from);
+      if (idx >= 0) {
+        state.inventory[idx].kind = opt.to;
+        pushLog(`Elder transforms a cell: ${opt.from} → ${opt.to}`);
+      }
+      eventResultEl.textContent = `The Elder reshapes your cell into a ${toKind.label}.`;
+      eventResultEl.classList.remove("hidden");
+      for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
+      eventContinueBtn.classList.remove("hidden");
+      eventContinueBtn.textContent = "Continue ▶";
+      eventContinueBtn.onclick = () => openOverworld();
+      renderInventory();
+      updateHUD();
+    });
+    eventChoicesEl.appendChild(btn);
+  }
+
+  const skip = document.createElement("button");
+  skip.className = "event-choice subtle";
+  skip.type = "button";
+  skip.textContent = "Leave";
+  skip.addEventListener("click", () => openOverworld());
+  eventChoicesEl.appendChild(skip);
 }
 
 // ---------- Treasure scene (mutation pick) ----------
@@ -426,7 +486,6 @@ export function beginNewRun() {
   state.growthLevel = 0;
   state.subclass = null;
   state.abilityCooldown = 0;
-  state.evolutionOffered = false;
   state.mutations = [];
   refreshMutationBonuses();
   state.runStats = {
@@ -439,6 +498,14 @@ export function beginNewRun() {
   // Seed starting items from meta unlocks.
   for (const key of mods.startItems || []) {
     tryPickupItem(key);
+  }
+  // Apply lab-unlocked starting mutations.
+  if (state.meta.labUnlocks) {
+    for (const key of Object.keys(state.meta.labUnlocks)) {
+      if (MUTATIONS[key] && !state.mutations.includes(key)) {
+        addMutation(key);
+      }
+    }
   }
   state.map = generateRunMap();
   state.mapNode = { row: 0, col: 0 };
@@ -482,6 +549,8 @@ export function openRunEndScreen(victory) {
   const xp = calculateRunXp(state.runStats);
   if (!runEndAwarded) {
     grantXp(state.meta, xp.total);
+    state.meta.scrap = (state.meta.scrap || 0) + (state.scrap || 0);
+    state.meta.mana = (state.meta.mana || 0) + (state.mana || 0);
     state.meta.lastRun = {
       xp: xp.total,
       victory,
@@ -498,7 +567,7 @@ export function openRunEndScreen(victory) {
   const summary = document.createElement("div");
   summary.className = "run-end-summary";
   summary.textContent = victory
-    ? `You defeated the Gelatinous King! Reached Level ${state.level}.`
+    ? `Victory! Reached Level ${state.level}.`
     : `You died on Level ${state.level}.`;
   wrap.appendChild(summary);
 
@@ -635,6 +704,96 @@ export function openMetaMenu() {
 
   openModal({
     title: "🧪 Upgrade Lab",
+    bodyEl: wrap,
+    actions: [
+      {
+        label: "Back to Hub",
+        primary: true,
+        onClick: () => {
+          closeModal();
+          renderHub();
+        },
+      },
+    ],
+  });
+}
+
+// ---------- Mutation Lab (hub building, uses scrap/mana) ----------
+const LAB_RECIPES = [
+  { id: "acidic_skin", name: "Acidic Skin", desc: "Reflect 1 damage to attackers", icon: "🧪", cost: { scrap: 5 } },
+  { id: "iron_stomach", name: "Iron Stomach", desc: "Digest items 50% faster", icon: "⚙️", cost: { scrap: 8 } },
+  { id: "crystalline_membrane", name: "Crystalline Membrane", desc: "-1 damage from all sources", icon: "💎", cost: { scrap: 12 } },
+  { id: "pulsing_core", name: "Pulsing Core", desc: "Regen 1 HP every 6 ticks", icon: "💗", cost: { mana: 5 } },
+  { id: "bouncy_body", name: "Bouncy Body", desc: "25% chance to dodge attacks", icon: "🟢", cost: { mana: 8 } },
+  { id: "magnetic_membrane", name: "Magnetic Membrane", desc: "Auto-collect items in adjacent lanes", icon: "🧲", cost: { mana: 10 } },
+  { id: "hungry_void", name: "Hungry Void", desc: "Heal 2 HP every time you digest", icon: "🕳️", cost: { scrap: 6, mana: 6 } },
+];
+
+export function openMutationLab() {
+  const wrap = document.createElement("div");
+  wrap.className = "meta-menu";
+
+  const header = document.createElement("div");
+  header.className = "meta-header";
+  header.textContent = `🔩 Scrap: ${state.meta.scrap || 0} · 🔮 Mana: ${state.meta.mana || 0}`;
+  wrap.appendChild(header);
+
+  const desc = document.createElement("div");
+  desc.style.cssText = "color:#aaa;font-size:12px;margin-bottom:8px;";
+  desc.textContent = "Spend scrap and mana earned from digesting items to unlock starting mutations for future runs.";
+  wrap.appendChild(desc);
+
+  const grid = document.createElement("div");
+  grid.className = "meta-grid";
+
+  for (const recipe of LAB_RECIPES) {
+    const owned = !!(state.meta.labUnlocks && state.meta.labUnlocks[recipe.id]);
+    const card = document.createElement("div");
+    card.className = "meta-upgrade";
+
+    const costParts = [];
+    if (recipe.cost.scrap) costParts.push(`🔩${recipe.cost.scrap}`);
+    if (recipe.cost.mana) costParts.push(`🔮${recipe.cost.mana}`);
+    const canAfford =
+      (!recipe.cost.scrap || (state.meta.scrap || 0) >= recipe.cost.scrap) &&
+      (!recipe.cost.mana || (state.meta.mana || 0) >= recipe.cost.mana);
+
+    if (owned) card.classList.add("owned");
+    else if (canAfford) card.classList.add("available");
+    else card.classList.add("unavailable");
+
+    const name = document.createElement("div");
+    name.className = "meta-name";
+    name.textContent = `${recipe.icon} ${recipe.name}`;
+    card.appendChild(name);
+
+    const descEl = document.createElement("div");
+    descEl.className = "meta-desc";
+    descEl.textContent = recipe.desc;
+    card.appendChild(descEl);
+
+    const foot = document.createElement("div");
+    foot.className = "meta-foot";
+    foot.textContent = owned ? "✓ Unlocked" : costParts.join(" + ");
+    card.appendChild(foot);
+
+    if (!owned && canAfford) {
+      card.addEventListener("click", () => {
+        if (recipe.cost.scrap) state.meta.scrap -= recipe.cost.scrap;
+        if (recipe.cost.mana) state.meta.mana -= recipe.cost.mana;
+        if (!state.meta.labUnlocks) state.meta.labUnlocks = {};
+        state.meta.labUnlocks[recipe.id] = true;
+        saveMeta(state.meta);
+        openMutationLab();
+      });
+    }
+    grid.appendChild(card);
+  }
+
+  wrap.appendChild(grid);
+
+  openModal({
+    title: "🧬 Mutation Lab",
     bodyEl: wrap,
     actions: [
       {

@@ -399,6 +399,11 @@ export const ENEMY_POOL_BY_LEVEL = {
   3: ["skeleton", "fire_imp", "stone_golem", "mimic", "killer_bee", "serpent"],
   4: ["fire_imp", "stone_golem", "stone_golem", "mimic", "treasure_goblin", "serpent"],
   5: ["stone_golem", "stone_golem", "mimic", "serpent", "treasure_goblin"],
+  6: ["fire_imp", "stone_golem", "mimic", "serpent", "killer_bee"],
+  7: ["stone_golem", "stone_golem", "mimic", "serpent", "treasure_goblin"],
+  8: ["stone_golem", "mimic", "mimic", "serpent", "killer_bee"],
+  9: ["stone_golem", "stone_golem", "mimic", "serpent", "serpent"],
+  10: ["stone_golem", "stone_golem", "mimic", "serpent", "treasure_goblin"],
 };
 
 /** Terminus enemies per level */
@@ -407,7 +412,12 @@ export const TERMINI = {
   2: { id: "t2", name: "Bone Knight", emoji: "☠️", hp: 35, attack: 4, speed: 1, gold: 25, dropChance: 1, dropPool: ["rusty_sword", "shield_fragment"] },
   3: { id: "t3", name: "Ember Drake", emoji: "🐉", hp: 50, attack: 5, speed: 1, gold: 35, dropChance: 1, dropPool: ["flame_core"] },
   4: { id: "t4", name: "Ancient Golem", emoji: "🧱", hp: 70, attack: 6, speed: 2, gold: 50, dropChance: 1, dropPool: ["shield_fragment"] },
-  5: { id: "t5", name: "Gelatinous King", emoji: "👑", hp: 100, attack: 7, speed: 1, gold: 100, dropChance: 1, dropPool: ["bomb"], boss: true, phase: 1, absorbed: [] },
+  5: { id: "t5", name: "Flame Wyrm", emoji: "🐲", hp: 65, attack: 6, speed: 1, gold: 40, dropChance: 1, dropPool: ["flame_core", "fire_bomb"] },
+  6: { id: "t6", name: "Crystal Tortoise", emoji: "🐢", hp: 80, attack: 5, speed: 2, gold: 50, dropChance: 1, dropPool: ["frost_shard", "shield_fragment"] },
+  7: { id: "t7", name: "Phantom Swarm", emoji: "👻", hp: 55, attack: 8, speed: 1, gold: 55, dropChance: 1, dropPool: ["venom_gland"] },
+  8: { id: "t8", name: "Iron Sentinel", emoji: "🤖", hp: 100, attack: 7, speed: 2, gold: 65, dropChance: 1, dropPool: ["iron_blade", "shield_fragment"] },
+  9: { id: "t9", name: "Void Serpent", emoji: "🐍", hp: 90, attack: 9, speed: 1, gold: 80, dropChance: 1, dropPool: ["void_gem"] },
+  10: { id: "t10", name: "Gelatinous King", emoji: "👑", hp: 120, attack: 8, speed: 1, gold: 150, dropChance: 1, dropPool: ["crystal_heart"], boss: true, phase: 1, absorbed: [] },
 };
 
 /** Obstacles

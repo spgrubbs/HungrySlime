@@ -20,8 +20,10 @@ const modalActions = $("modal-actions");
 const logEl = $("log");
 const progressFill = $("level-progress-fill");
 const banner = $("path-banner");
+const defEl = $("def");
 const scrapEl = $("scrap");
 const manaEl = $("mana");
+const buffStripEl = $("buff-strip");
 const abilityBtn = $("ability-btn");
 
 // ---------- Banner / Log / Float ----------
@@ -51,6 +53,23 @@ export function floatText(kind, text, targetEl) {
   el.style.top = rect.top - gameRect.top + "px";
   $("game").appendChild(el);
   setTimeout(() => el.remove(), 900);
+}
+
+// ---------- Projectile ----------
+export function launchProjectile(emoji, lane, targetCol) {
+  const pathEl = $("path");
+  if (!pathEl) return;
+  const pathRect = pathEl.getBoundingClientRect();
+  const laneH = pathRect.height / LANES;
+  const colW = pathRect.width / COLS;
+  const el = document.createElement("div");
+  el.className = "projectile";
+  el.textContent = emoji;
+  el.style.top = lane * laneH + laneH / 2 - 12 + "px";
+  el.style.left = "0px";
+  el.style.setProperty("--target-x", targetCol * colW + "px");
+  pathEl.appendChild(el);
+  setTimeout(() => el.remove(), 400);
 }
 
 // ---------- Modal ----------
@@ -85,6 +104,34 @@ export function renderAll() {
   updateProgress();
 }
 
+export function formatItemTooltip(item) {
+  let tip = `${item.name} [${item.rarity}]`;
+  // Held Effect
+  if (item.held) {
+    const parts = [];
+    if (item.held.attack) parts.push(`+${item.held.attack} ATK`);
+    if (item.held.damageReduction) parts.push(`-${item.held.damageReduction} DMG taken`);
+    if (item.held.maxHpBonus) parts.push(`+${item.held.maxHpBonus} max HP`);
+    if (item.held.regen) parts.push(`+${item.held.regen} HP every ${item.held.regenInterval || 5} ticks`);
+    tip += `\nHeld Effect: ${parts.join(", ")}`;
+  } else {
+    tip += "\nHeld Effect: None";
+  }
+  // Digested Effect
+  if (item.digest) {
+    const parts = [];
+    if (item.digest.heal) parts.push(`+${item.digest.heal} HP`);
+    if (item.digest.gold) parts.push(`+${item.digest.gold} gold`);
+    if (item.digest.permMaxHp) parts.push(`+${item.digest.permMaxHp} max HP (permanent)`);
+    if (item.digest.enemyDamage) parts.push(`${item.digest.enemyDamage} damage to adjacent enemy`);
+    if (item.digest.buff) parts.push(`grants ${item.digest.buff}`);
+    tip += `\nDigested Effect: ${parts.join(", ")} (${item.digestTime} ticks)`;
+  } else {
+    tip += "\nDigested Effect: None";
+  }
+  return tip;
+}
+
 function entityTooltip(ent) {
   if (ent.type === "enemy" || ent.type === "terminus") {
     const d = ent.def;
@@ -100,25 +147,7 @@ function entityTooltip(ent) {
   if (ent.type === "item" && ent.def.itemKey) {
     const item = ITEMS[ent.def.itemKey];
     if (!item) return ent.def.emoji;
-    let tip = `${item.name} [${item.rarity}]`;
-    if (item.held) {
-      const parts = [];
-      if (item.held.attack) parts.push(`+${item.held.attack} ATK`);
-      if (item.held.damageReduction) parts.push(`-${item.held.damageReduction} DMG`);
-      if (item.held.maxHpBonus) parts.push(`+${item.held.maxHpBonus} HP`);
-      if (item.held.regen) parts.push(`+${item.held.regen} regen/${item.held.regenInterval || 5}t`);
-      if (parts.length) tip += `\nHeld: ${parts.join(", ")}`;
-    }
-    if (item.digest) {
-      const parts = [];
-      if (item.digest.heal) parts.push(`+${item.digest.heal} HP`);
-      if (item.digest.gold) parts.push(`+${item.digest.gold} gold`);
-      if (item.digest.buff) parts.push(item.digest.buff);
-      if (item.digest.enemyDamage) parts.push(`${item.digest.enemyDamage} dmg`);
-      if (item.digest.permMaxHp) parts.push(`+${item.digest.permMaxHp} max HP`);
-      if (parts.length) tip += `\nDigest: ${parts.join(", ")} (${item.digestTime}t)`;
-    }
-    return tip;
+    return formatItemTooltip(item);
   }
   if (ent.type === "obstacle") {
     return `${ent.def.name}\nDamage: ${ent.def.damage}${ent.def.blocking ? "\nBlocking" : ""}`;
@@ -166,12 +195,32 @@ export function renderPath() {
   slimeEl.style.top = state.lane * laneHeightPct + "%";
 }
 
+const BUFF_DISPLAY = {
+  shield: { icon: "🛡️", label: "Shield" },
+  burn: { icon: "🔥", label: "Burning" },
+  burn_aura: { icon: "🔥", label: "Burn Aura" },
+  haste: { icon: "⚡", label: "Haste" },
+  acid: { icon: "🧫", label: "Acid" },
+  sticky: { icon: "🍯", label: "Sticky" },
+  bloat: { icon: "🫧", label: "Bloat" },
+  poison_coat: { icon: "🧪", label: "Poison Coat" },
+  iron_skin: { icon: "🛡️", label: "Iron Skin" },
+  swift_stomach: { icon: "⚡", label: "Swift Stomach" },
+  golden_touch: { icon: "✨", label: "Golden Touch" },
+  thorn_aura: { icon: "🌹", label: "Thorn Aura" },
+};
+
 export function updateHUD() {
   const b = getHeldBonuses();
   const shieldStr = state.shield > 0 ? ` +🛡${state.shield}` : "";
   hpEl.textContent = `❤️ ${state.hp}/${effectiveMaxHp()}${shieldStr}`;
   goldEl.textContent = `🪙 ${state.gold}`;
   atkEl.textContent = `⚔️ ${b.attack}`;
+  if (defEl) {
+    const totalDR = b.damageReduction;
+    defEl.textContent = `🛡 -${totalDR}`;
+    defEl.classList.toggle("hidden", totalDR <= 0);
+  }
   if (scrapEl) {
     scrapEl.textContent = `🔩 ${state.scrap || 0}`;
     scrapEl.classList.toggle("hidden", !state.scrap);
@@ -182,19 +231,34 @@ export function updateHUD() {
   }
   lvlEl.textContent = `Lv ${state.level}`;
 
+  // Buff strip
+  if (buffStripEl) {
+    buffStripEl.innerHTML = "";
+    for (const [name, ticks] of Object.entries(state.buffs)) {
+      const cfg = BUFF_DISPLAY[name];
+      if (!cfg) continue;
+      const chip = document.createElement("span");
+      chip.className = "buff-chip";
+      const dur = ticks === Infinity ? "∞" : ticks;
+      chip.textContent = `${cfg.icon}${dur}`;
+      chip.title = `${cfg.label}${ticks === Infinity ? " (permanent)" : ` (${ticks} ticks)`}`;
+      buffStripEl.appendChild(chip);
+    }
+  }
+
   // Ability button: show when subclass chosen, display cooldown
   if (abilityBtn) {
     if (state.subclass) {
-      const def = SUBCLASSES[state.subclass];
+      const sc = SUBCLASSES[state.subclass];
       abilityBtn.classList.remove("hidden");
       if (state.abilityCooldown > 0) {
         abilityBtn.textContent = state.abilityCooldown;
         abilityBtn.classList.add("on-cooldown");
-        abilityBtn.title = `${def.ability.name} (${state.abilityCooldown} ticks)`;
+        abilityBtn.title = `${sc.ability.name} (${state.abilityCooldown} ticks)`;
       } else {
-        abilityBtn.textContent = def.ability.icon;
+        abilityBtn.textContent = sc.ability.icon;
         abilityBtn.classList.remove("on-cooldown");
-        abilityBtn.title = `${def.ability.name}: ${def.ability.desc}`;
+        abilityBtn.title = `${sc.ability.name}: ${sc.ability.desc}`;
       }
     } else {
       abilityBtn.classList.add("hidden");

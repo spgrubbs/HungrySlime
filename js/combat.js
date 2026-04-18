@@ -117,12 +117,11 @@ export function spawnRandomPathEntity() {
   } else {
     const locRoll = Math.random();
     let loc;
-    if (locRoll < 0.25) loc = LOCATIONS.fountain;
-    else if (locRoll < 0.45) loc = LOCATIONS.shop;
-    else if (locRoll < 0.6) loc = LOCATIONS.shrine;
-    else if (locRoll < 0.75) loc = LOCATIONS.merchant;
-    else if (locRoll < 0.88) loc = LOCATIONS.pool;
-    else loc = LOCATIONS.elder;
+    if (locRoll < 0.3) loc = LOCATIONS.fountain;
+    else if (locRoll < 0.5) loc = LOCATIONS.shop;
+    else if (locRoll < 0.7) loc = LOCATIONS.shrine;
+    else if (locRoll < 0.85) loc = LOCATIONS.merchant;
+    else loc = LOCATIONS.pool;
     spawnEntity(loc, "location", lane, col);
   }
 }
@@ -495,8 +494,6 @@ export function openLocation(ent) {
     openMerchant(ent);
   } else if (loc.id === "pool") {
     openPool(ent);
-  } else if (loc.id === "elder") {
-    openElder(ent);
   }
 }
 

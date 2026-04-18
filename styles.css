@@ -373,6 +373,38 @@ body {
   color: #aaa;
 }
 
+/* ---------- Projectile ---------- */
+.projectile {
+  position: absolute;
+  font-size: 22px;
+  z-index: 20;
+  pointer-events: none;
+  animation: fly-projectile 0.35s ease-in forwards;
+}
+@keyframes fly-projectile {
+  0% { transform: translateX(0); opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateX(var(--target-x)); opacity: 0; }
+}
+
+/* ---------- Buff Strip ---------- */
+.buff-strip {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 0;
+  padding: 0 8px;
+}
+.buff-chip {
+  font-size: 11px;
+  background: #2a2a4a;
+  border: 1px solid #3a3a6a;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #ccc;
+  white-space: nowrap;
+}
+
 /* ---------- Modal ---------- */
 .modal {
   position: absolute;
