@@ -536,6 +536,8 @@ export function renderHub() {
   if (line && state.meta) {
     line.textContent = `XP: ${state.meta.availableXp} · Lifetime: ${state.meta.totalXp}`;
   }
+  const hubSlime = document.querySelector(".hub-slime");
+  if (hubSlime) hubSlime.textContent = getEquippedSkinEmoji();
 }
 
 // ---------- Run end + meta menu ----------
@@ -806,6 +808,116 @@ export function openMutationLab() {
       },
     ],
   });
+}
+
+// ---------- Wardrobe (cosmetics) ----------
+const WARDROBE_SKINS = [
+  { id: "default", name: "Classic Slime", emoji: "🟢", desc: "The original. Simple. Hungry.", color: "#3a8a3a", unlocked: true },
+  { id: "moss", name: "Mosscloak", emoji: "🌿", desc: "Draped in living moss and tiny ferns.", color: "#2a6a2a", cost: { gold: 0 } },
+  { id: "amber", name: "Amber Heart", emoji: "🟡", desc: "Crystallized tree resin, warm to the touch.", color: "#b8860b", cost: { gold: 50 } },
+  { id: "clockwork", name: "Cogslime", emoji: "⚙️", desc: "Gears visible through translucent gel.", color: "#8a7a5a", cost: { scrap: 15 } },
+  { id: "mycelium", name: "Sporeling", emoji: "🍄", desc: "Threaded with bioluminescent mycelium.", color: "#6a3a6a", cost: { mana: 10 } },
+  { id: "frost", name: "Frostbloom", emoji: "🧊", desc: "Frozen dew clings to a pale blue body.", color: "#5a8aaa", cost: { gold: 80 } },
+  { id: "magma", name: "Cinder Gel", emoji: "🔥", desc: "Molten veins glow beneath dark slag.", color: "#8a3a2a", cost: { scrap: 10, mana: 10 } },
+  { id: "void", name: "Nullslime", emoji: "🔮", desc: "Translucent purple. Stars drift inside.", color: "#4a2a6a", cost: { mana: 20 } },
+  { id: "bark", name: "Barkbound", emoji: "🌲", desc: "Encased in living wood. Roots trail behind.", color: "#5a4a2a", cost: { scrap: 8, gold: 40 } },
+  { id: "gilded", name: "Gilded Ooze", emoji: "✨", desc: "Leafed in gold recovered from the depths.", color: "#aa8a2a", cost: { gold: 150 } },
+  { id: "crystal", name: "Prism Jelly", emoji: "💎", desc: "Refracts light in all directions.", color: "#7aaabb", cost: { scrap: 15, mana: 15 } },
+];
+
+export function openWardrobe() {
+  const wrap = document.createElement("div");
+  wrap.className = "meta-menu";
+
+  const header = document.createElement("div");
+  header.className = "meta-header";
+  header.textContent = `🪙 ${state.meta.totalXp || 0} XP · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0}`;
+  wrap.appendChild(header);
+
+  if (!state.meta.wardrobe) state.meta.wardrobe = { owned: ["default"], equipped: "default" };
+  const wd = state.meta.wardrobe;
+
+  const grid = document.createElement("div");
+  grid.className = "meta-grid";
+
+  for (const skin of WARDROBE_SKINS) {
+    const owned = skin.unlocked || wd.owned.includes(skin.id);
+    const equipped = wd.equipped === skin.id;
+    const card = document.createElement("div");
+    card.className = "meta-upgrade";
+
+    let canAfford = true;
+    let costStr = "";
+    if (!owned && skin.cost) {
+      const parts = [];
+      if (skin.cost.gold && (state.meta.totalXp || 0) < skin.cost.gold) canAfford = false;
+      if (skin.cost.scrap && (state.meta.scrap || 0) < skin.cost.scrap) canAfford = false;
+      if (skin.cost.mana && (state.meta.mana || 0) < skin.cost.mana) canAfford = false;
+      if (skin.cost.gold) parts.push(`${skin.cost.gold}🪙`);
+      if (skin.cost.scrap) parts.push(`${skin.cost.scrap}🔩`);
+      if (skin.cost.mana) parts.push(`${skin.cost.mana}🔮`);
+      costStr = parts.join(" + ");
+    }
+
+    if (equipped) card.classList.add("owned");
+    else if (owned) card.classList.add("available");
+    else if (canAfford) card.classList.add("available");
+    else card.classList.add("unavailable");
+
+    const name = document.createElement("div");
+    name.className = "meta-name";
+    name.textContent = `${skin.emoji} ${skin.name}`;
+    card.appendChild(name);
+
+    const desc = document.createElement("div");
+    desc.className = "meta-desc";
+    desc.textContent = skin.desc;
+    card.appendChild(desc);
+
+    const foot = document.createElement("div");
+    foot.className = "meta-foot";
+    if (equipped) foot.textContent = "✓ Equipped";
+    else if (owned) foot.textContent = "Click to equip";
+    else foot.textContent = costStr || "Free";
+    card.appendChild(foot);
+
+    card.addEventListener("click", () => {
+      if (equipped) return;
+      if (owned) {
+        wd.equipped = skin.id;
+        saveMeta(state.meta);
+        openWardrobe();
+        return;
+      }
+      if (!canAfford) return;
+      if (skin.cost?.gold) state.meta.totalXp -= skin.cost.gold;
+      if (skin.cost?.scrap) state.meta.scrap -= skin.cost.scrap;
+      if (skin.cost?.mana) state.meta.mana -= skin.cost.mana;
+      wd.owned.push(skin.id);
+      wd.equipped = skin.id;
+      saveMeta(state.meta);
+      openWardrobe();
+    });
+    grid.appendChild(card);
+  }
+
+  wrap.appendChild(grid);
+
+  openModal({
+    title: "🎨 Wardrobe",
+    bodyEl: wrap,
+    actions: [{
+      label: "Back to Hub",
+      primary: true,
+      onClick: () => { closeModal(); renderHub(); },
+    }],
+  });
+}
+
+function getEquippedSkinEmoji() {
+  if (!state.meta?.wardrobe?.equipped) return "🟢";
+  const skin = WARDROBE_SKINS.find(s => s.id === state.meta.wardrobe.equipped);
+  return skin ? skin.emoji : "🟢";
 }
 
 // Placeholder hub screens for not-yet-built buildings.

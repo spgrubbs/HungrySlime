@@ -19,6 +19,7 @@ import {
   beginNewRun,
   openMetaMenu,
   openMutationLab,
+  openWardrobe,
   openPlaceholder,
 } from "./scenes.js";
 import { useAbility, SUBCLASSES } from "./subclass.js";
@@ -129,12 +130,7 @@ export function hookHub() {
     );
   }
   if (cosmeticsBtn) {
-    cosmeticsBtn.addEventListener("click", () =>
-      openPlaceholder(
-        "🎨 Wardrobe",
-        "Skins and color variants. Coming soon."
-      )
-    );
+    cosmeticsBtn.addEventListener("click", () => openWardrobe());
   }
 }
 

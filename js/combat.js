@@ -580,7 +580,11 @@ function openShrine(ent) {
       if (b.buff === "vitality") {
         state.maxHp += 5;
         state.hp = Math.min(effectiveMaxHp(), state.hp + 5);
-        pushLog("Vitality: +5 max HP");
+        pushLog("Heartwood Bond: +5 max HP");
+      } else if (b.buff === "gearmind") {
+        state.maxHp += 0;
+        state.buffs.gearmind = Infinity;
+        pushLog("Gearmind: +1 attack");
       } else {
         state.buffs[b.buff] = Infinity;
         pushLog(`Blessing: ${b.name}`);
