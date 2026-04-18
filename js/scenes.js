@@ -40,6 +40,8 @@ import {
 } from "./ui.js";
 import { generateLevelSchedule } from "./pathgen.js";
 import { SUBCLASSES, rollSubclassChoices, applySubclass } from "./subclass.js";
+import { getPetBonuses } from "./pets.js";
+import { syncRunStats, refreshDailies, trackIncrement } from "./quests.js";
 
 // ---------- DOM refs ----------
 const overworldMapEl = $("overworld-map");
@@ -265,6 +267,7 @@ function enterEvolutionPool() {
     btn.innerHTML = `<span class="mc-icon">${def.emoji}</span><span class="mc-name">${def.name}</span><span class="mc-desc">${def.desc}</span>`;
     btn.addEventListener("click", () => {
       applySubclass(key);
+      trackIncrement("subclassChosen");
       eventResultEl.textContent = `You emerge from the pool as a ${def.name}!`;
       eventResultEl.classList.remove("hidden");
       for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
@@ -331,6 +334,7 @@ function enterElderScene() {
         state.inventory[idx].kind = opt.to;
         pushLog(`Elder transforms a cell: ${opt.from} → ${opt.to}`);
       }
+      trackIncrement("elderVisits");
       eventResultEl.textContent = `The Elder reshapes your cell into a ${toKind.label}.`;
       eventResultEl.classList.remove("hidden");
       for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
@@ -525,6 +529,8 @@ export function beginNewRun() {
   }
   state.map = generateRunMap();
   state.mapNode = { row: 0, col: 0 };
+  state._petBonuses = getPetBonuses();
+  refreshDailies();
   closeModal();
   setScene("run");
   updatePauseBtn();
@@ -550,7 +556,7 @@ export function goToHub() {
 export function renderHub() {
   const line = document.getElementById("hub-meta-line");
   if (line && state.meta) {
-    line.textContent = `XP: ${state.meta.availableXp} · Lifetime: ${state.meta.totalXp}`;
+    line.textContent = `XP: ${state.meta.availableXp} · 🪙 ${state.meta.gold || 0} · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0} · 💠 ${state.meta.gems || 0}`;
   }
   const hubSlime = document.querySelector(".hub-slime");
   if (hubSlime) hubSlime.textContent = getEquippedSkinEmoji();
@@ -564,9 +570,11 @@ export function openRunEndScreen(victory) {
   state.paused = true;
   updatePauseBtn();
 
+  syncRunStats();
   const xp = calculateRunXp(state.runStats);
   if (!runEndAwarded) {
     grantXp(state.meta, xp.total);
+    state.meta.gold = (state.meta.gold || 0) + (state.gold || 0);
     state.meta.scrap = (state.meta.scrap || 0) + (state.scrap || 0);
     state.meta.mana = (state.meta.mana || 0) + (state.mana || 0);
     state.meta.lastRun = {
@@ -802,6 +810,7 @@ export function openMutationLab() {
         if (!state.meta.labUnlocks) state.meta.labUnlocks = {};
         state.meta.labUnlocks[recipe.id] = true;
         saveMeta(state.meta);
+        trackIncrement("labRecipes");
         openMutationLab();
       });
     }
@@ -912,6 +921,7 @@ export function openWardrobe() {
       wd.owned.push(skin.id);
       wd.equipped = skin.id;
       saveMeta(state.meta);
+      trackIncrement("skinsOwned");
       openWardrobe();
     });
     grid.appendChild(card);

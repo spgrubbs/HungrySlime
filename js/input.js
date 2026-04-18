@@ -6,7 +6,6 @@ import {
   effectiveMaxHp,
   growSlime,
   discardSelected,
-  toggleArrangeMode,
 } from "./inventory.js";
 import { handleEncounter } from "./combat.js";
 import {
@@ -22,7 +21,10 @@ import {
   openWardrobe,
   openPlaceholder,
 } from "./scenes.js";
-import { useAbility, SUBCLASSES } from "./subclass.js";
+import { useAbility } from "./subclass.js";
+import { openRanch } from "./pets.js";
+import { openQuestTracker } from "./quests.js";
+import { trackIncrement } from "./quests.js";
 
 // ---------- DOM refs ----------
 const slimeEl = $("slime");
@@ -31,9 +33,9 @@ const laneDownBtn = $("lane-down");
 const pauseBtn = $("pause-btn");
 const growBtn = $("grow-btn");
 const discardBtn = $("discard-btn");
-const arrangeBtn = $("arrange-btn");
 const eventContinueBtn = $("event-continue");
 const abilityBtn = $("ability-btn");
+const questBtn = $("quest-btn");
 
 // ---------- Lane + pause ----------
 function applyLaneRegen() {
@@ -45,9 +47,6 @@ function applyLaneRegen() {
   }
 }
 
-// Whenever the slime changes lane, anything sitting in its column in the new
-// lane gets walked-on. The encounter triggers immediately — items get picked
-// up, fountains open, obstacles damage, lone enemies start a combat round.
 function checkLaneEntry() {
   const ent = state.entities.find(
     (e) => e.lane === state.lane && e.col === SLIME_COL
@@ -86,6 +85,7 @@ function onPause() {
 function onAbility() {
   if (state.scene !== "run" || !state.subclass) return;
   useAbility();
+  trackIncrement("abilitiesUsed");
 }
 
 // ---------- Hookups ----------
@@ -94,9 +94,12 @@ export function hookInput() {
   laneDownBtn.addEventListener("click", onLaneDown);
   pauseBtn.addEventListener("click", onPause);
   if (abilityBtn) abilityBtn.addEventListener("click", onAbility);
-  growBtn.addEventListener("click", growSlime);
+  if (questBtn) questBtn.addEventListener("click", () => openQuestTracker());
+  growBtn.addEventListener("click", () => {
+    growSlime();
+    trackIncrement("growCount");
+  });
   discardBtn.addEventListener("click", discardSelected);
-  if (arrangeBtn) arrangeBtn.addEventListener("click", toggleArrangeMode);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp" || e.key === "w") onLaneUp();
@@ -114,13 +117,18 @@ export function hookHub() {
   const startBtn = document.getElementById("hub-start");
   const upgradesBtn = document.getElementById("hub-upgrades");
   const mutationsBtn = document.getElementById("hub-mutations");
+  const ranchBtn = document.getElementById("hub-ranch");
+  const questsBtn = document.getElementById("hub-quests");
   const codexBtn = document.getElementById("hub-codex");
   const cosmeticsBtn = document.getElementById("hub-cosmetics");
   if (startBtn) startBtn.addEventListener("click", () => beginNewRun());
-  if (upgradesBtn) upgradesBtn.addEventListener("click", () => openMetaMenu());
-  if (mutationsBtn) {
-    mutationsBtn.addEventListener("click", () => openMutationLab());
-  }
+  if (upgradesBtn) upgradesBtn.addEventListener("click", () => {
+    openMetaMenu();
+    trackIncrement("labVisits");
+  });
+  if (mutationsBtn) mutationsBtn.addEventListener("click", () => openMutationLab());
+  if (ranchBtn) ranchBtn.addEventListener("click", () => openRanch());
+  if (questsBtn) questsBtn.addEventListener("click", () => openQuestTracker());
   if (codexBtn) {
     codexBtn.addEventListener("click", () =>
       openPlaceholder(
@@ -129,14 +137,11 @@ export function hookHub() {
       )
     );
   }
-  if (cosmeticsBtn) {
-    cosmeticsBtn.addEventListener("click", () => openWardrobe());
-  }
+  if (cosmeticsBtn) cosmeticsBtn.addEventListener("click", () => openWardrobe());
 }
 
 export function hookEventView() {
   if (eventContinueBtn) {
-    // The onclick handler is rebound per-event in resolveEventChoice; this
-    // line just exists so the button is registered in the DOM.
+    // The onclick handler is rebound per-event in resolveEventChoice.
   }
 }
