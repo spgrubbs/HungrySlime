@@ -197,6 +197,11 @@ export function spawnTerminus() {
 // Apply damage from an obstacle to the slime, taking held / mutation
 // reductions and god-mode into account.
 export function applyObstacleDamageToSlime(ent) {
+  // Stoneslime: immune to all obstacle damage.
+  if (state.subclass === "stoneslime") {
+    pushLog(`${ent.def.name} bounces off your stone hide`);
+    return 0;
+  }
   const mut = state.mutBonuses || getMutationBonuses(state.mutations);
   const ironSkin = state.buffs.iron_skin ? 1 : 0;
   const reduction =

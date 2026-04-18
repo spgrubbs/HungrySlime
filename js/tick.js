@@ -1,9 +1,10 @@
 // SlimeVenture — tick loop, entity movement, level progression
 
-import { state, SLIME_COL, levelTickLength } from "./state.js";
+import { state, SLIME_COL, LANES, clamp, levelTickLength } from "./state.js";
 import { STOMACH_KINDS, getMutationBonuses } from "./mutations.js";
 import { getHeldBonuses, effectiveMaxHp, tryPickupItem, applyDigest, addGold } from "./inventory.js";
 import { floatText, pushLog, renderAll } from "./ui.js";
+import { tickAbilityCooldown, getSubclassPassive } from "./subclass.js";
 import {
   handleEncounter,
   handleSlideInteraction,
@@ -127,6 +128,7 @@ export function tick() {
   const acidBuff = state.buffs.acid ? 2 : 1;
   const baseDigestStep =
     (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest * acidBuff;
+  const acidSlimeYield = getSubclassPassive().digestYieldMult || 1;
   for (let i = 0; i < state.inventory.length; i++) {
     const cell = state.inventory[i];
     if (!cell.item) continue;
@@ -134,7 +136,7 @@ export function tick() {
     if (!kindCfg.digests) continue;
     cell.item.digestProgress += baseDigestStep * (kindCfg.speedMult || 1);
     if (cell.item.digestProgress >= cell.item.def.digestTime) {
-      applyDigest(cell.item, kindCfg.yieldMult || 1);
+      applyDigest(cell.item, (kindCfg.yieldMult || 1) * acidSlimeYield);
       cell.item = null;
     }
   }
@@ -191,6 +193,50 @@ export function tick() {
     }
 
     ent.col = nextCol;
+  }
+
+  // 4a. Enemy behaviors: chasers track the slime's lane, fleers run away,
+  //     lane-switchers change lane periodically.
+  for (const ent of state.entities) {
+    if (ent.type !== "enemy" && ent.type !== "terminus") continue;
+    const beh = ent.def.behavior;
+    if (!beh) continue;
+
+    if (beh === "chaser") {
+      if (ent.lane !== state.lane && ent.col > SLIME_COL + 1) {
+        const dir = ent.lane < state.lane ? 1 : -1;
+        const target = ent.lane + dir;
+        if (
+          target >= 0 &&
+          target < LANES &&
+          !state.entities.some((e) => e !== ent && e.lane === target && e.col === ent.col)
+        ) {
+          ent.lane = target;
+        }
+      }
+    } else if (beh === "fleer") {
+      ent.fleeCounter = (ent.fleeCounter || 0) + 1;
+      if (ent.fleeCounter >= (ent.def.fleeTimer || 8)) {
+        pushLog(`${ent.def.name} escapes!`);
+        removeEntity(ent);
+        continue;
+      }
+      if (ent.lane === state.lane && ent.col > SLIME_COL + 1) {
+        const away = ent.lane === 0 ? 1 : ent.lane === LANES - 1 ? LANES - 2 : (Math.random() < 0.5 ? ent.lane - 1 : ent.lane + 1);
+        if (!state.entities.some((e) => e !== ent && e.lane === away && e.col === ent.col)) {
+          ent.lane = away;
+        }
+      }
+    } else if (beh === "lane_switcher") {
+      const interval = ent.def.switchInterval || 3;
+      if (state.tick % interval === 0) {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        const target = clamp(ent.lane + dir, 0, LANES - 1);
+        if (!state.entities.some((e) => e !== ent && e.lane === target && e.col === ent.col)) {
+          ent.lane = target;
+        }
+      }
+    }
   }
 
   // 4b. Magnetic Body / Magnetic Membrane: vacuum items from adjacent lanes.
@@ -273,6 +319,27 @@ export function tick() {
     return;
   }
 
-  // 10. Render
+  // 10. Tick ability cooldown
+  tickAbilityCooldown();
+
+  // 11. Sparkslime contact burn: enemies adjacent to slime take burn damage.
+  const sub = getSubclassPassive();
+  if (sub.contactBurn) {
+    const adjacent = state.entities.filter(
+      (e) =>
+        (e.type === "enemy" || e.type === "terminus") &&
+        e.lane === state.lane &&
+        e.col === SLIME_COL + 1
+    );
+    for (const enemy of adjacent) {
+      enemy.hp -= sub.contactBurn;
+      if (enemy.hp <= 0) {
+        state.runStats.enemiesDefeated++;
+        removeEntity(enemy);
+      }
+    }
+  }
+
+  // 12. Render
   renderAll();
 }

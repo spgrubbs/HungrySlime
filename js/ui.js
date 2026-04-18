@@ -2,6 +2,8 @@
 
 import { state, $, COLS, LANES, levelTickLength } from "./state.js";
 import { getHeldBonuses, effectiveMaxHp, renderInventory } from "./inventory.js";
+import { ITEMS } from "./data.js";
+import { SUBCLASSES } from "./subclass.js";
 
 // ---------- DOM refs ----------
 const laneGrid = $("lane-grid");
@@ -18,6 +20,9 @@ const modalActions = $("modal-actions");
 const logEl = $("log");
 const progressFill = $("level-progress-fill");
 const banner = $("path-banner");
+const scrapEl = $("scrap");
+const manaEl = $("mana");
+const abilityBtn = $("ability-btn");
 
 // ---------- Banner / Log / Float ----------
 export function showBanner(text, ms = 1400) {
@@ -80,6 +85,50 @@ export function renderAll() {
   updateProgress();
 }
 
+function entityTooltip(ent) {
+  if (ent.type === "enemy" || ent.type === "terminus") {
+    const d = ent.def;
+    let tip = `${d.name}\nHP: ${ent.hp}/${ent.maxHp}  ATK: ${d.attack || 0}`;
+    if (d.gold) tip += `\nGold: ${d.gold}`;
+    if (d.behavior === "chaser") tip += "\nChases you between lanes";
+    if (d.behavior === "fleer") tip += `\nFlees after ${d.fleeTimer || 8} ticks`;
+    if (d.behavior === "lane_switcher") tip += "\nSwitches lanes periodically";
+    if (d.onDeath?.burn) tip += "\nBurns you on death";
+    if (d.boss) tip += "\nBOSS";
+    return tip;
+  }
+  if (ent.type === "item" && ent.def.itemKey) {
+    const item = ITEMS[ent.def.itemKey];
+    if (!item) return ent.def.emoji;
+    let tip = `${item.name} [${item.rarity}]`;
+    if (item.held) {
+      const parts = [];
+      if (item.held.attack) parts.push(`+${item.held.attack} ATK`);
+      if (item.held.damageReduction) parts.push(`-${item.held.damageReduction} DMG`);
+      if (item.held.maxHpBonus) parts.push(`+${item.held.maxHpBonus} HP`);
+      if (item.held.regen) parts.push(`+${item.held.regen} regen/${item.held.regenInterval || 5}t`);
+      if (parts.length) tip += `\nHeld: ${parts.join(", ")}`;
+    }
+    if (item.digest) {
+      const parts = [];
+      if (item.digest.heal) parts.push(`+${item.digest.heal} HP`);
+      if (item.digest.gold) parts.push(`+${item.digest.gold} gold`);
+      if (item.digest.buff) parts.push(item.digest.buff);
+      if (item.digest.enemyDamage) parts.push(`${item.digest.enemyDamage} dmg`);
+      if (item.digest.permMaxHp) parts.push(`+${item.digest.permMaxHp} max HP`);
+      if (parts.length) tip += `\nDigest: ${parts.join(", ")} (${item.digestTime}t)`;
+    }
+    return tip;
+  }
+  if (ent.type === "obstacle") {
+    return `${ent.def.name}\nDamage: ${ent.def.damage}${ent.def.blocking ? "\nBlocking" : ""}`;
+  }
+  if (ent.type === "location") {
+    return ent.def.name;
+  }
+  return "";
+}
+
 export function renderPath() {
   // Clear and rebuild the cell grid
   laneGrid.innerHTML = "";
@@ -101,6 +150,7 @@ export function renderPath() {
     const entEl = document.createElement("div");
     entEl.className = "entity";
     entEl.textContent = ent.def.emoji;
+    entEl.title = entityTooltip(ent);
     cell.appendChild(entEl);
     if ((ent.type === "enemy" || ent.type === "terminus") && ent.maxHp > 0) {
       const bar = document.createElement("div");
@@ -122,7 +172,34 @@ export function updateHUD() {
   hpEl.textContent = `❤️ ${state.hp}/${effectiveMaxHp()}${shieldStr}`;
   goldEl.textContent = `🪙 ${state.gold}`;
   atkEl.textContent = `⚔️ ${b.attack}`;
+  if (scrapEl) {
+    scrapEl.textContent = `🔩 ${state.scrap || 0}`;
+    scrapEl.classList.toggle("hidden", !state.scrap);
+  }
+  if (manaEl) {
+    manaEl.textContent = `🔮 ${state.mana || 0}`;
+    manaEl.classList.toggle("hidden", !state.mana);
+  }
   lvlEl.textContent = `Lv ${state.level}`;
+
+  // Ability button: show when subclass chosen, display cooldown
+  if (abilityBtn) {
+    if (state.subclass) {
+      const def = SUBCLASSES[state.subclass];
+      abilityBtn.classList.remove("hidden");
+      if (state.abilityCooldown > 0) {
+        abilityBtn.textContent = state.abilityCooldown;
+        abilityBtn.classList.add("on-cooldown");
+        abilityBtn.title = `${def.ability.name} (${state.abilityCooldown} ticks)`;
+      } else {
+        abilityBtn.textContent = def.ability.icon;
+        abilityBtn.classList.remove("on-cooldown");
+        abilityBtn.title = `${def.ability.name}: ${def.ability.desc}`;
+      }
+    } else {
+      abilityBtn.classList.add("hidden");
+    }
+  }
 }
 
 export function updateProgress() {

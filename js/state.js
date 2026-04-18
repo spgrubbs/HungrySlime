@@ -30,6 +30,8 @@ export const state = {
   hp: 20,
   maxHp: 20,
   gold: 0,
+  scrap: 0,
+  mana: 0,
   lane: 1,
   level: 1,
   levelTicks: 0,
@@ -57,6 +59,9 @@ export const state = {
   regenCounter: 0,
   passiveCounter: 0, // separate counter for mutation passive regen
   growthLevel: 0, // number of times player has grown
+  subclass: null, // chosen subclass key (e.g. "spitslime")
+  abilityCooldown: 0, // ticks until active ability is usable again
+  evolutionOffered: false, // whether evolution pool has appeared this run
   log: [],
   // Mutations earned this run (powerful relic-like passives, no inv slot).
   mutations: [],

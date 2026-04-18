@@ -357,6 +357,21 @@ body {
   color: #1a1306;
   border-color: #e08f2a;
 }
+.ability-btn {
+  background: #3a2a6a;
+  border-color: #6a4aaa;
+  font-size: 16px;
+  position: relative;
+  transition: background 0.15s, opacity 0.15s;
+}
+.ability-btn:active {
+  background: #6a4aaa;
+}
+.ability-btn.on-cooldown {
+  opacity: 0.5;
+  font-size: 13px;
+  color: #aaa;
+}
 
 /* ---------- Modal ---------- */
 .modal {
