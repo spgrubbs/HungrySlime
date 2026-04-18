@@ -9,7 +9,7 @@ export const LANES = 3;
 export const SLIME_COL = 0; // slime is anchored at leftmost visible column
 export const BASE_TICK_MS = 1500;
 export const DEFAULT_LEVEL_TICK_LENGTH = 42; // fallback when a node has no tickLength
-export const MAX_LEVEL = 5;
+export const MAX_LEVEL = 10;
 
 // ---------- DOM helper ----------
 export const $ = (id) => document.getElementById(id);

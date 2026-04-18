@@ -15,7 +15,7 @@ import {
   makeItemInstance,
 } from "./inventory.js";
 import { spawnEntity, removeEntity } from "./combat.js";
-import { pushLog, floatText, showBanner, renderAll, updateHUD } from "./ui.js";
+import { pushLog, floatText, showBanner, renderAll, updateHUD, launchProjectile } from "./ui.js";
 
 // ---------- Subclass definitions ----------
 export const SUBCLASSES = {
@@ -158,7 +158,6 @@ export function useAbility() {
       break;
     }
     case "spitslime": {
-      // Find first item in inventory and eject it.
       let ejected = null;
       let ejectedIdx = -1;
       for (let i = 0; i < state.inventory.length; i++) {
@@ -176,21 +175,31 @@ export function useAbility() {
       const baseDmg = 8;
       const bonusDmg = ejected.def.digest?.enemyDamage || ejected.def.held?.attack || 3;
       const totalDmg = baseDmg + bonusDmg;
-      const target = state.entities.find(
-        (e) =>
-          (e.type === "enemy" || e.type === "terminus") &&
-          e.lane === state.lane &&
-          e.col === SLIME_COL + 1
-      );
+      // Find first enemy in slime's lane across the whole path.
+      const targets = state.entities
+        .filter(
+          (e) =>
+            (e.type === "enemy" || e.type === "terminus") &&
+            e.lane === state.lane &&
+            e.col > SLIME_COL
+        )
+        .sort((a, b) => a.col - b.col);
+      const target = targets[0] || null;
+      // Launch visual projectile.
+      launchProjectile(ejected.def.emoji, state.lane, target ? target.col : 5);
       if (target) {
-        target.hp -= totalDmg;
-        floatText("dmg", `-${totalDmg}`, slimeEl);
-        pushLog(`Spit ${ejected.def.name} at ${target.def.name} for ${totalDmg}!`);
-        if (target.hp <= 0) {
-          state.runStats.enemiesDefeated++;
-          removeEntity(target);
-          pushLog(`${target.def.name} destroyed!`);
-        }
+        setTimeout(() => {
+          target.hp -= totalDmg;
+          floatText("dmg", `-${totalDmg}`, slimeEl);
+          pushLog(`Spit ${ejected.def.name} at ${target.def.name} for ${totalDmg}!`);
+          if (target.hp <= 0) {
+            state.runStats.enemiesDefeated++;
+            removeEntity(target);
+            pushLog(`${target.def.name} destroyed!`);
+          }
+          renderAll();
+          updateHUD();
+        }, 300);
       } else {
         pushLog(`Spit ${ejected.def.name} into the void...`);
       }

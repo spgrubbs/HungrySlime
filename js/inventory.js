@@ -3,7 +3,7 @@
 import { state, devState, $, rand, pick, SLIME_COL } from "./state.js";
 import { ITEMS, ITEM_POOL_BY_RARITY } from "./data.js";
 import { STOMACH_KINDS, MUTATIONS, getMutationBonuses } from "./mutations.js";
-import { pushLog, floatText, renderAll, updateHUD } from "./ui.js";
+import { pushLog, floatText, renderAll, updateHUD, formatItemTooltip } from "./ui.js";
 
 // ---------- DOM refs ----------
 const slimeEl = $("slime");
@@ -400,7 +400,7 @@ function renderInventoryZone() {
         ring.style.background = `conic-gradient(#9f6 ${pct}%, transparent ${pct}%)`;
         slot.appendChild(ring);
       }
-      slot.title = `${item.def.name} (${kindCfg.label})\n${item.def.flavor}`;
+      slot.title = formatItemTooltip(item.def) + `\n[${kindCfg.label}]`;
     } else {
       slot.title = kindCfg.label + " — " + kindCfg.desc;
     }

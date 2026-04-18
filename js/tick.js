@@ -162,7 +162,12 @@ export function tick() {
     const nextCol = ent.col - 1;
 
     if (nextCol < 0) {
-      // Despawned off the left edge
+      if (ent.type === "terminus") {
+        pushLog(`${ent.def.name} broke through! You lose!`);
+        state.hp = 0;
+        onDeath();
+        return;
+      }
       removeEntity(ent);
       continue;
     }

@@ -18,6 +18,7 @@ import {
 import {
   beginNewRun,
   openMetaMenu,
+  openMutationLab,
   openPlaceholder,
 } from "./scenes.js";
 import { useAbility, SUBCLASSES } from "./subclass.js";
@@ -117,12 +118,7 @@ export function hookHub() {
   if (startBtn) startBtn.addEventListener("click", () => beginNewRun());
   if (upgradesBtn) upgradesBtn.addEventListener("click", () => openMetaMenu());
   if (mutationsBtn) {
-    mutationsBtn.addEventListener("click", () =>
-      openPlaceholder(
-        "🧬 Mutation Den",
-        "Future home of permanent mutation unlocks. Coming soon."
-      )
-    );
+    mutationsBtn.addEventListener("click", () => openMutationLab());
   }
   if (codexBtn) {
     codexBtn.addEventListener("click", () =>
