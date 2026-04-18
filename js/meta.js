@@ -108,9 +108,9 @@ export const UPGRADES = {
   startSword: {
     tier: 3,
     cost: 15,
-    name: "Wakeful Blade",
-    desc: "Start with a Rusty Sword",
-    effect: { startItem: "rusty_sword" },
+    name: "Thorned Awakening",
+    desc: "Start with a Thorn Branch",
+    effect: { startItem: "thorn_branch" },
   },
   startJelly: {
     tier: 3,
@@ -122,16 +122,16 @@ export const UPGRADES = {
   startShield: {
     tier: 3,
     cost: 20,
-    name: "Iron Guts",
-    desc: "Start with a Shield Fragment",
-    effect: { startItem: "shield_fragment" },
+    name: "Salvaged Plating",
+    desc: "Start with a Clockwork Plate",
+    effect: { startItem: "clockwork_plate" },
   },
   startFlame: {
     tier: 3,
     cost: 25,
-    name: "Fire Affinity",
-    desc: "Start with a Flame Core",
-    effect: { startItem: "flame_core" },
+    name: "Geothermal Core",
+    desc: "Start with a Magma Geode",
+    effect: { startItem: "magma_geode" },
   },
 };
 

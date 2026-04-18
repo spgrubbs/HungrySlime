@@ -125,6 +125,7 @@ export function getHeldBonuses() {
   }
   // Buffs
   if (state.buffs.burn_aura) attack += 1;
+  if (state.buffs.gearmind) attack += 1;
   return { attack, damageReduction, maxHpBonus, regen, regenInterval };
 }
 
@@ -191,7 +192,8 @@ export function applyDigest(item, yieldMult = 1) {
   // Secondary resources from item tags.
   const tags = item.def.tags || [];
   if (tags.includes("metal")) {
-    const scrapAmt = Math.ceil(2 * yieldMult);
+    let scrapAmt = Math.ceil(2 * yieldMult);
+    if (state.subclass === "cogslime") scrapAmt *= 2;
     state.scrap = (state.scrap || 0) + scrapAmt;
     pushLog(`+${scrapAmt} scrap`);
   }

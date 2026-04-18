@@ -21,62 +21,62 @@ import { pushLog, floatText, showBanner, renderAll, updateHUD, launchProjectile 
 export const SUBCLASSES = {
   stoneslime: {
     id: "stoneslime",
-    name: "Stoneslime",
+    name: "Petrified Ooze",
     emoji: "🪨",
-    desc: "Immune to obstacle damage. Slower lane changes (1-tick delay). +5 max HP.",
+    desc: "Encased in mineral deposits. Immune to obstacle damage. +5 max HP.",
     color: "#7a6f5a",
     passive: {
       obstacleImmune: true,
       maxHpBonus: 5,
     },
     ability: {
-      name: "Fortify",
-      desc: "Gain a 10-HP shield.",
+      name: "Calcify",
+      desc: "Harden your shell — gain a 10-HP shield.",
       cooldown: 12,
       icon: "🛡️",
     },
   },
   spitslime: {
     id: "spitslime",
-    name: "Spitslime",
-    emoji: "💦",
-    desc: "Eject a held item as a projectile. Deals 8 + item-based bonus damage.",
+    name: "Thornspitter",
+    emoji: "🌿",
+    desc: "Launch digesting items as thorned projectiles across the lane.",
     color: "#5a8a6f",
     passive: {},
     ability: {
-      name: "Spit",
-      desc: "Launch the first held item at the nearest enemy.",
+      name: "Thorn Spit",
+      desc: "Eject the first held item at the nearest enemy in your lane.",
       cooldown: 6,
-      icon: "💦",
+      icon: "🌿",
     },
   },
   cauldronslime: {
     id: "cauldronslime",
-    name: "Cauldronslime",
+    name: "Alchemical Gel",
     emoji: "🧪",
-    desc: "Active ability consumes 2 items and produces 1 of higher rarity. +1 stomach cell.",
+    desc: "A living crucible. Consumes 2 items to forge 1 of higher rarity. +1 stomach cell.",
     color: "#6a5a8a",
     passive: {
       extraStomach: 1,
     },
     ability: {
-      name: "Brew",
-      desc: "Consume 2 items to create 1 of higher rarity.",
+      name: "Transmute",
+      desc: "Dissolve 2 items inside you to create 1 of higher rarity.",
       cooldown: 10,
       icon: "🧪",
     },
   },
   sparkslime: {
     id: "sparkslime",
-    name: "Sparkslime",
-    emoji: "⚡",
-    desc: "Burns enemies on contact. Active ability deals AoE fire damage to all lanes.",
+    name: "Ember Jelly",
+    emoji: "🔥",
+    desc: "Geothermal heat burns enemies on contact. Active: AoE fire burst.",
     color: "#8a6a3a",
     passive: {
       contactBurn: 3,
     },
     ability: {
-      name: "Firestorm",
+      name: "Eruption",
       desc: "Deal 5 fire damage to all enemies on screen.",
       cooldown: 15,
       icon: "🔥",
@@ -84,9 +84,9 @@ export const SUBCLASSES = {
   },
   acidslime: {
     id: "acidslime",
-    name: "Acidslime",
+    name: "Corrosive Mass",
     emoji: "🟢",
-    desc: "All cells can digest. Digest yields doubled. Items cannot be held.",
+    desc: "Every cell digests. Yields doubled. Nothing survives inside you.",
     color: "#3a8a3a",
     passive: {
       allDigest: true,
@@ -97,6 +97,22 @@ export const SUBCLASSES = {
       desc: "Instantly digest the frontmost item.",
       cooldown: 8,
       icon: "🫠",
+    },
+  },
+  cogslime: {
+    id: "cogslime",
+    name: "Cogwork Symbiote",
+    emoji: "⚙️",
+    desc: "Fused with clockwork. Scrap drops doubled. Active: overclock for haste.",
+    color: "#8a7a5a",
+    passive: {
+      scrapMult: 2,
+    },
+    ability: {
+      name: "Overclock",
+      desc: "Gain 10 ticks of haste.",
+      cooldown: 12,
+      icon: "⚙️",
     },
   },
 };
@@ -260,6 +276,12 @@ export function useAbility() {
         pushLog("Nothing to dissolve!");
         return;
       }
+      break;
+    }
+    case "cogslime": {
+      state.buffs.haste = (state.buffs.haste || 0) + 10;
+      floatText("heal", "⚙️ HASTE", slimeEl);
+      pushLog("Overclock! +10 ticks of haste");
       break;
     }
     default:

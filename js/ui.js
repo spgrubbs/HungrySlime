@@ -193,6 +193,20 @@ export function renderPath() {
   // Position slime
   const laneHeightPct = 100 / LANES;
   slimeEl.style.top = state.lane * laneHeightPct + "%";
+  // Apply equipped skin emoji
+  const skinEmoji = getSlimeSkinEmoji();
+  if (slimeEl.textContent !== skinEmoji) slimeEl.textContent = skinEmoji;
+}
+
+function getSlimeSkinEmoji() {
+  if (state.subclass) {
+    const SUBCLASS_EMOJI = { stoneslime: "🪨", spitslime: "💦", cauldronslime: "🧪", sparkslime: "⚡", acidslime: "🟢", cogslime: "⚙️" };
+    return SUBCLASS_EMOJI[state.subclass] || "🟢";
+  }
+  const equipped = state.meta?.wardrobe?.equipped;
+  if (!equipped || equipped === "default") return "🟢";
+  const SKIN_EMOJI = { moss: "🌿", amber: "🟡", clockwork: "⚙️", mycelium: "🍄", frost: "🧊", magma: "🔥", void: "🔮", bark: "🌲", gilded: "✨", crystal: "💎" };
+  return SKIN_EMOJI[equipped] || "🟢";
 }
 
 const BUFF_DISPLAY = {
@@ -207,7 +221,8 @@ const BUFF_DISPLAY = {
   iron_skin: { icon: "🛡️", label: "Iron Skin" },
   swift_stomach: { icon: "⚡", label: "Swift Stomach" },
   golden_touch: { icon: "✨", label: "Golden Touch" },
-  thorn_aura: { icon: "🌹", label: "Thorn Aura" },
+  thorn_aura: { icon: "🌹", label: "Briar Ward" },
+  gearmind: { icon: "⚙️", label: "Gearmind" },
 };
 
 export function updateHUD() {
