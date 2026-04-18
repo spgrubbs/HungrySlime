@@ -10,6 +10,7 @@ import {
   rand,
   pick,
   currentNodeConfig,
+  currentMapNode,
 } from "./state.js";
 import {
   ITEMS,
@@ -402,6 +403,13 @@ export function resolveCombatRound(enemy) {
     if (enemy.def.dropChance && enemy.def.dropPool && Math.random() < enemy.def.dropChance) {
       const key = pick(enemy.def.dropPool);
       tryPickupItem(key);
+    }
+    // Non-boss terminus (elite): guaranteed rare item drop.
+    if (enemy.type === "terminus" && !enemy.def.boss) {
+      const rareKey = randomItemKey("rare");
+      tryPickupItem(rareKey);
+      pushLog(`Elite defeated! Rare drop: ${ITEMS[rareKey].name}`);
+      showBanner(`💎 Rare drop!`, 1500);
     }
     applyEnemyDeathEffects(enemy.def);
     removeEntity(enemy);
