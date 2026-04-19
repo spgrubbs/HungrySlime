@@ -183,18 +183,48 @@ body {
 }
 
 .inv-zone {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   padding: 6px;
   background: #0f1426;
   border: 1px solid #2a3356;
   border-radius: 8px;
   position: relative;
 }
-.inv-zone.arrange-mode {
-  border-color: #ffd84d;
-  box-shadow: inset 0 0 0 1px rgba(255, 216, 77, 0.25);
+.inv-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.inv-row-reverse {
+  direction: rtl;
+}
+.inv-row-reverse > * {
+  direction: ltr;
+}
+.inv-connector {
+  height: 8px;
+  width: 28px;
+  border: 2px solid #3a4676;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  margin: -1px 0;
+}
+.inv-connector.right {
+  align-self: flex-end;
+  margin-right: 12px;
+  border-left: none;
+  border-radius: 0 0 6px 0;
+}
+.inv-connector.left {
+  align-self: flex-start;
+  margin-left: 12px;
+  border-right: none;
+  border-radius: 0 0 0 6px;
+}
+.slot.spacer {
+  visibility: hidden;
 }
 
 .slot {

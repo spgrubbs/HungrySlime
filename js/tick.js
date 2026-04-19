@@ -138,8 +138,9 @@ export function tick() {
   const blessingDigest = state.buffs.swift_stomach ? 1.25 : 1;
   const acidBuff = state.buffs.acid ? 2 : 1;
   const petDigest = 1 + (petB.digestSpeedPct || 0) / 100;
+  const cursedSlow = Math.max(0.1, 1 - (bonuses.digestSpeedPenalty || 0));
   const baseDigestStep =
-    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest * acidBuff * petDigest;
+    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest * acidBuff * petDigest * cursedSlow;
   const acidSlimeYield = getSubclassPassive().digestYieldMult || 1;
   for (let i = 0; i < state.inventory.length; i++) {
     const cell = state.inventory[i];

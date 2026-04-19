@@ -52,7 +52,6 @@ export const state = {
   // selected = { index: number } when something is picked up. arrangeMode
   // toggles whether the next click swaps items or swaps entire cells.
   selected: null,
-  arrangeMode: false,
   buffs: {}, // name -> remaining ticks (Infinity for permanent blessings)
   shield: 0, // shield HP absorbs damage before real HP
   blessings: [], // shrine blessing keys earned this run

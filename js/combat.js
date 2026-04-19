@@ -102,7 +102,10 @@ export function spawnRandomPathEntity() {
       spawnEntity(def, "enemy", lane, col);
     }
   } else if ((roll -= w.item) < 0) {
-    const itemKey = randomItemKey();
+    const isCursed = Math.random() < 0.08;
+    const itemKey = isCursed
+      ? pick(ITEM_POOL_BY_RARITY.cursed)
+      : randomItemKey();
     spawnEntity(
       { id: itemKey, emoji: ITEMS[itemKey].emoji, itemKey },
       "item",
@@ -510,6 +513,8 @@ export function openLocation(ent) {
     openMerchant(ent);
   } else if (loc.id === "pool") {
     openPool(ent);
+  } else if (loc.id === "elder") {
+    openElder(ent);
   }
 }
 
@@ -543,6 +548,7 @@ function openShop(ent) {
   for (const item of stock) {
     const card = document.createElement("div");
     card.className = "shop-card";
+    card.dataset.price = item.price;
     card.innerHTML = `<span class="shop-emoji">${item.def.emoji}</span><span class="shop-name">${item.def.name}</span><span class="shop-price">${item.price}🪙</span>`;
     if (state.gold < item.price) card.classList.add("too-expensive");
     card.addEventListener("click", () => {
@@ -552,6 +558,10 @@ function openShop(ent) {
       card.classList.add("sold");
       card.querySelector(".shop-price").textContent = "SOLD";
       updateHUD();
+      for (const other of wrap.querySelectorAll(".shop-card:not(.sold)")) {
+        const p = parseInt(other.dataset.price, 10);
+        other.classList.toggle("too-expensive", state.gold < p);
+      }
     });
     wrap.appendChild(card);
   }

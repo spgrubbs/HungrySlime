@@ -71,11 +71,12 @@ export const NODE_TYPES = {
   },
 };
 
-const ROW_WIDTHS = [1, 3, 3, 3, 3, 3, 3, 3, 3, 1];
+const ROW_WIDTHS = [1, 3, 3, 3, 1, 3, 3, 3, 3, 1];
 const NUM_PATHS = 5;
 const MIDDLE_TYPE_BAG = ["combat", "combat", "combat", "treasure", "event", "elder"];
 const PRE_BOSS_TYPE_BAG = ["combat", "dangerous", "dangerous", "event", "treasure"];
-export const EVOLUTION_ROW = 5;
+export const EVOLUTION_ROW = 4;
+const CONVERGENCE_ROWS = new Set([EVOLUTION_ROW]);
 
 function rand(n) {
   return Math.floor(Math.random() * n);
@@ -110,8 +111,8 @@ export function generateRunMap() {
     for (let r = 1; r < rows - 1; r++) {
       const nextWidth = grid[r + 1].length;
       let target;
-      if (r + 1 === rows - 1) {
-        target = 0; // boss column
+      if (r + 1 === rows - 1 || CONVERGENCE_ROWS.has(r + 1)) {
+        target = 0;
       } else {
         // Adjacent column, clamped to grid
         const choices = [col - 1, col, col + 1].filter(

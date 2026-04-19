@@ -13,6 +13,7 @@ import {
   floatText,
   updateHUD,
   updatePauseBtn,
+  openEventLog,
 } from "./ui.js";
 import {
   beginNewRun,
@@ -36,6 +37,7 @@ const discardBtn = $("discard-btn");
 const eventContinueBtn = $("event-continue");
 const abilityBtn = $("ability-btn");
 const questBtn = $("quest-btn");
+const logBtn = $("log-btn");
 
 // ---------- Lane + pause ----------
 function applyLaneRegen() {
@@ -95,6 +97,7 @@ export function hookInput() {
   pauseBtn.addEventListener("click", onPause);
   if (abilityBtn) abilityBtn.addEventListener("click", onAbility);
   if (questBtn) questBtn.addEventListener("click", () => openQuestTracker());
+  if (logBtn) logBtn.addEventListener("click", () => openEventLog());
   growBtn.addEventListener("click", () => {
     growSlime();
     trackIncrement("growCount");
