@@ -26,6 +26,14 @@ const manaEl = $("mana");
 const buffStripEl = $("buff-strip");
 const abilityBtn = $("ability-btn");
 
+// ---------- Event log buffer ----------
+const LOG_MAX = 200;
+const logBuffer = [];
+
+export function getLogBuffer() {
+  return logBuffer;
+}
+
 // ---------- Banner / Log / Float ----------
 export function showBanner(text, ms = 1400) {
   banner.textContent = text;
@@ -39,8 +47,42 @@ export function pushLog(text) {
   e.textContent = text;
   logEl.appendChild(e);
   setTimeout(() => e.remove(), 3100);
-  // cap entries
   while (logEl.children.length > 5) logEl.firstChild.remove();
+  logBuffer.push({ tick: state.tick, text });
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+}
+
+export function openEventLog() {
+  const wrap = document.createElement("div");
+  wrap.className = "meta-menu";
+  wrap.style.maxHeight = "400px";
+  wrap.style.overflowY = "auto";
+
+  if (logBuffer.length === 0) {
+    wrap.textContent = "No events recorded yet.";
+  } else {
+    let lastTick = -1;
+    for (let i = logBuffer.length - 1; i >= 0; i--) {
+      const entry = logBuffer[i];
+      if (entry.tick !== lastTick) {
+        const tickHeader = document.createElement("div");
+        tickHeader.style.cssText = "color:#5bc0de;font-weight:bold;margin-top:6px;font-size:11px;border-bottom:1px solid #2a3356;padding-bottom:2px;";
+        tickHeader.textContent = `— Tick ${entry.tick} —`;
+        wrap.appendChild(tickHeader);
+        lastTick = entry.tick;
+      }
+      const row = document.createElement("div");
+      row.style.cssText = "color:#ccc;font-size:12px;padding:1px 0 1px 8px;";
+      row.textContent = entry.text;
+      wrap.appendChild(row);
+    }
+  }
+
+  openModal({
+    title: "📜 Event Log",
+    bodyEl: wrap,
+    actions: [{ label: "Close", primary: true, onClick: () => closeModal() }],
+  });
 }
 
 export function floatText(kind, text, targetEl) {
@@ -105,14 +147,15 @@ export function renderAll() {
 }
 
 export function formatItemTooltip(item) {
-  let tip = `${item.name} [${item.rarity}]`;
+  let tip = `${item.name} [${item.rarity}]${item.cursed ? " ☠ CURSED" : ""}`;
   // Held Effect
   if (item.held) {
     const parts = [];
-    if (item.held.attack) parts.push(`+${item.held.attack} ATK`);
-    if (item.held.damageReduction) parts.push(`-${item.held.damageReduction} DMG taken`);
+    if (item.held.attack) parts.push(`${item.held.attack > 0 ? "+" : ""}${item.held.attack} ATK`);
+    if (item.held.damageReduction) parts.push(`${item.held.damageReduction > 0 ? "-" : "+"}${Math.abs(item.held.damageReduction)} DMG taken`);
     if (item.held.maxHpBonus) parts.push(`+${item.held.maxHpBonus} max HP`);
     if (item.held.regen) parts.push(`+${item.held.regen} HP every ${item.held.regenInterval || 5} ticks`);
+    if (item.held.digestSpeedPenalty) parts.push(`-${Math.round(item.held.digestSpeedPenalty * 100)}% digest speed`);
     tip += `\nHeld Effect: ${parts.join(", ")}`;
   } else {
     tip += "\nHeld Effect: None";
@@ -120,6 +163,7 @@ export function formatItemTooltip(item) {
   // Digested Effect
   if (item.digest) {
     const parts = [];
+    if (item.digest.hp && item.digest.hp < 0) parts.push(`${item.digest.hp} HP!`);
     if (item.digest.heal) parts.push(`+${item.digest.heal} HP`);
     if (item.digest.gold) parts.push(`+${item.digest.gold} gold`);
     if (item.digest.permMaxHp) parts.push(`+${item.digest.permMaxHp} max HP (permanent)`);

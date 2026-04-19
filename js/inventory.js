@@ -10,7 +10,6 @@ import { trackIncrement } from "./quests.js";
 // ---------- DOM refs ----------
 const slimeEl = $("slime");
 const inventoryZoneEl = $("inventory-zone");
-const arrangeBtn = $("arrange-btn");
 const growBtn = $("grow-btn");
 const discardBtn = $("discard-btn");
 const mutationStripEl = $("mutation-strip");
@@ -113,6 +112,7 @@ export function getHeldBonuses() {
   let maxHpBonus = 0;
   let regen = 0;
   let regenInterval = 5;
+  let digestSpeedPenalty = 0;
   for (const cell of state.inventory) {
     if (!cell.item || !cell.item.def.held) continue;
     const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
@@ -125,11 +125,12 @@ export function getHeldBonuses() {
       regen += h.regen;
       if (h.regenInterval) regenInterval = h.regenInterval;
     }
+    if (h.digestSpeedPenalty) digestSpeedPenalty += h.digestSpeedPenalty;
   }
-  // Buffs
   if (state.buffs.burn_aura) attack += 1;
   if (state.buffs.gearmind) attack += 1;
-  return { attack, damageReduction, maxHpBonus, regen, regenInterval };
+  attack = Math.max(0, attack);
+  return { attack, damageReduction, maxHpBonus, regen, regenInterval, digestSpeedPenalty };
 }
 
 // Centralised positive-gold source so run-stats stay accurate.
@@ -152,6 +153,12 @@ export function applyDigest(item, yieldMult = 1) {
   // Numeric yields scale with the cell's yieldMult (acid sac etc).
   const scaledHeal = Math.round((d.heal || 0) * yieldMult);
   const scaledGold = Math.round((d.gold || 0) * yieldMult);
+  if (d.hp && d.hp < 0) {
+    const dmg = Math.abs(d.hp);
+    state.hp -= dmg;
+    pushLog(`Digested ${item.def.name}: -${dmg} HP!`);
+    floatText("dmg", `-${dmg}`, slimeEl);
+  }
   if (scaledHeal > 0) {
     state.hp = Math.min(effectiveMaxHp(), state.hp + scaledHeal);
     pushLog(`Digested ${item.def.name}: +${scaledHeal} HP`);
@@ -278,9 +285,6 @@ export function discardSelected() {
   updateHUD();
 }
 
-// Kept as no-op for backwards compat with any callers.
-export function toggleArrangeMode() {}
-
 export function growCost() {
   if (devState.freeGrowth) return 0;
   const base = 10 + state.growthLevel * 5;
@@ -318,9 +322,6 @@ export function renderInventory() {
   const cost = growCost();
   growBtn.textContent = `🧪 Grow (${cost}🪙)`;
   growBtn.disabled = state.gold < cost;
-  if (arrangeBtn) {
-    arrangeBtn.classList.add("hidden");
-  }
 }
 
 function renderMutationStrip() {
@@ -342,65 +343,95 @@ function renderMutationStrip() {
   }
 }
 
+const INV_COLS = 6;
+
+function buildSlotEl(cell, idx) {
+  const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
+  const slot = document.createElement("div");
+  slot.className = `slot kind-${cell.kind}`;
+  slot.style.background = kindCfg.color;
+  slot.style.borderColor = kindCfg.border;
+  if (!cell.item) slot.classList.add("empty");
+  if (state.selected && state.selected.index === idx) {
+    slot.classList.add("selected");
+  }
+  if (state.selected && state.selected.index !== idx) {
+    slot.classList.add("valid-target");
+  }
+
+  const kindBadge = document.createElement("div");
+  kindBadge.className = "kind-badge";
+  kindBadge.textContent = kindCfg.icon;
+  kindBadge.title = `${kindCfg.label} — ${kindCfg.desc}`;
+  slot.appendChild(kindBadge);
+
+  if (cell.item) {
+    const item = cell.item;
+    const itemEl = document.createElement("div");
+    itemEl.className = "slot-item";
+    itemEl.textContent = item.def.emoji;
+    slot.appendChild(itemEl);
+
+    const r = document.createElement("span");
+    r.className = `rarity ${item.def.rarity}`;
+    r.textContent = item.def.rarity.charAt(0).toUpperCase();
+    slot.appendChild(r);
+
+    if (kindCfg.digests) {
+      const ring = document.createElement("div");
+      ring.className = "digest-ring";
+      const pct = Math.min(
+        100,
+        (item.digestProgress / item.def.digestTime) * 100
+      );
+      ring.style.background = `conic-gradient(#9f6 ${pct}%, transparent ${pct}%)`;
+      slot.appendChild(ring);
+    }
+    slot.title = formatItemTooltip(item.def) + `\n[${kindCfg.label}]`;
+  } else {
+    slot.title = kindCfg.label + " — " + kindCfg.desc;
+  }
+  slot.addEventListener("click", () => onSlotClick(idx));
+  return slot;
+}
+
 function renderInventoryZone() {
   if (!inventoryZoneEl) return;
   inventoryZoneEl.innerHTML = "";
-  inventoryZoneEl.classList.remove("arrange-mode");
-  // Dynamic grid columns: always one row, all cells visible.
-  const cols = Math.max(6, state.inventory.length);
-  inventoryZoneEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  inventoryZoneEl.style.gridTemplateColumns = `repeat(${INV_COLS}, 1fr)`;
 
-  state.inventory.forEach((cell, idx) => {
-    const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;
-    const slot = document.createElement("div");
-    slot.className = `slot kind-${cell.kind}`;
-    slot.style.background = kindCfg.color;
-    slot.style.borderColor = kindCfg.border;
-    if (!cell.item) slot.classList.add("empty");
-    if (state.selected && state.selected.index === idx) {
-      slot.classList.add("selected");
+  const totalRows = Math.ceil(state.inventory.length / INV_COLS);
+  for (let row = 0; row < totalRows; row++) {
+    const start = row * INV_COLS;
+    const end = Math.min(start + INV_COLS, state.inventory.length);
+    const isReversed = row % 2 === 1;
+    const indices = [];
+    for (let i = start; i < end; i++) indices.push(i);
+    if (isReversed) indices.reverse();
+
+    const rowEl = document.createElement("div");
+    rowEl.className = `inv-row${isReversed ? " inv-row-reverse" : ""}`;
+    for (const idx of indices) {
+      rowEl.appendChild(buildSlotEl(state.inventory[idx], idx));
     }
-    // Highlight valid drop targets in default mode (any cell), arrange mode
-    // (any cell), so the user always sees clickable targets when something
-    // is selected.
-    if (state.selected && state.selected.index !== idx) {
-      slot.classList.add("valid-target");
+    // Pad the last row with empties so the grid stays aligned
+    const gap = INV_COLS - (end - start);
+    for (let g = 0; g < gap; g++) {
+      const spacer = document.createElement("div");
+      spacer.className = "slot spacer";
+      if (isReversed) rowEl.prepend(spacer);
+      else rowEl.appendChild(spacer);
     }
+    inventoryZoneEl.appendChild(rowEl);
+  }
 
-    // Stomach kind label/icon shown faintly behind the item.
-    const kindBadge = document.createElement("div");
-    kindBadge.className = "kind-badge";
-    kindBadge.textContent = kindCfg.icon;
-    kindBadge.title = `${kindCfg.label} — ${kindCfg.desc}`;
-    slot.appendChild(kindBadge);
-
-    if (cell.item) {
-      const item = cell.item;
-      const itemEl = document.createElement("div");
-      itemEl.className = "slot-item";
-      itemEl.textContent = item.def.emoji;
-      slot.appendChild(itemEl);
-
-      const r = document.createElement("span");
-      r.className = `rarity ${item.def.rarity}`;
-      r.textContent = item.def.rarity.charAt(0).toUpperCase();
-      slot.appendChild(r);
-
-      if (kindCfg.digests) {
-        const ring = document.createElement("div");
-        ring.className = "digest-ring";
-        const pct = Math.min(
-          100,
-          (item.digestProgress / item.def.digestTime) * 100
-        );
-        ring.style.background = `conic-gradient(#9f6 ${pct}%, transparent ${pct}%)`;
-        slot.appendChild(ring);
-      }
-      slot.title = formatItemTooltip(item.def) + `\n[${kindCfg.label}]`;
-    } else {
-      slot.title = kindCfg.label + " — " + kindCfg.desc;
+  // Draw connector lines between rows to show flow direction
+  if (totalRows > 1) {
+    for (let row = 0; row < totalRows - 1; row++) {
+      const connector = document.createElement("div");
+      connector.className = `inv-connector${row % 2 === 0 ? " right" : " left"}`;
+      const rowEls = inventoryZoneEl.querySelectorAll(".inv-row");
+      if (rowEls[row]) rowEls[row].after(connector);
     }
-    slot.addEventListener("click", () => onSlotClick(idx));
-    inventoryZoneEl.appendChild(slot);
-  });
+  }
 }

@@ -431,10 +431,7 @@ export function addMutation(key) {
   // Refresh HP cap in case maxHp grew.
   if (state.hp > effectiveMaxHp()) state.hp = effectiveMaxHp();
 
-  // Stomach-granting mutations: prepend a new typed cell to the inventory
-  // (new cells enter at the front so items flow through them toward the
-  // digestive sac at the back). The player can move it around with arrange
-  // mode.
+  // Stomach-granting mutations: prepend a new typed cell to the inventory.
   const def = MUTATIONS[key];
   const stomachKind = def.effect && def.effect.addStomach;
   if (stomachKind && STOMACH_KINDS[stomachKind]) {
@@ -497,7 +494,6 @@ export function beginNewRun() {
     }
   }
   state.selected = null;
-  state.arrangeMode = false;
   state.buffs = {};
   state.shield = 0;
   state.blessings = [];
