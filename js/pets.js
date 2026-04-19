@@ -103,8 +103,12 @@ export const PET_KEYS = Object.keys(PET_DEFS);
 // ---------- Ranch helpers ----------
 function ensureRanch() {
   if (!state.meta.ranch) {
-    state.meta.ranch = { pets: {}, activeSlots: 3 };
+    state.meta.ranch = { pets: {} };
   }
+  let slots = 1;
+  if (state.meta.unlocks?.petSlot2) slots = 2;
+  if (state.meta.unlocks?.petSlot3) slots = 3;
+  state.meta.ranch.activeSlots = slots;
   return state.meta.ranch;
 }
 
@@ -221,7 +225,7 @@ export function openRanch() {
 
   const desc = document.createElement("div");
   desc.style.cssText = "color:#aaa;font-size:12px;margin-bottom:8px;";
-  desc.textContent = "Raise pets to earn passive bonuses during runs. Up to 3 active pets accompany you.";
+  desc.textContent = `Raise pets to earn passive bonuses during runs. Up to ${ranch.activeSlots} active pet${ranch.activeSlots > 1 ? "s" : ""} can accompany you.`;
   wrap.appendChild(desc);
 
   const grid = document.createElement("div");

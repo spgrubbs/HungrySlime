@@ -17,6 +17,7 @@ import {
 } from "./ui.js";
 import {
   beginNewRun,
+  openLoadout,
   openMetaMenu,
   openMutationLab,
   openWardrobe,
@@ -124,7 +125,7 @@ export function hookHub() {
   const questsBtn = document.getElementById("hub-quests");
   const codexBtn = document.getElementById("hub-codex");
   const cosmeticsBtn = document.getElementById("hub-cosmetics");
-  if (startBtn) startBtn.addEventListener("click", () => beginNewRun());
+  if (startBtn) startBtn.addEventListener("click", () => openLoadout());
   if (upgradesBtn) upgradesBtn.addEventListener("click", () => {
     openMetaMenu();
     trackIncrement("labVisits");

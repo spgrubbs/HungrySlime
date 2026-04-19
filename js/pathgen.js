@@ -15,6 +15,86 @@ import {
 } from "./data.js";
 import { randomItemKey } from "./inventory.js";
 
+// ---------- Pre-planned patterns ----------
+// Formations placed as a unit. Tick offsets are relative to the base tick.
+// Lane -1 means "all lanes". Cost is deducted from the difficulty budget.
+const PATTERNS = [
+  {
+    id: "mountain_squeeze",
+    cost: 6,
+    minLevel: 2,
+    entries: [
+      { dt: 0, lane: 0, type: "obstacle", obsKey: "boulder" },
+      { dt: 0, lane: 2, type: "obstacle", obsKey: "boulder" },
+    ],
+  },
+  {
+    id: "zigzag_maze",
+    cost: 12,
+    minLevel: 4,
+    entries: [
+      { dt: 0, lane: 0, type: "obstacle", obsKey: "boulder" },
+      { dt: 0, lane: 1, type: "obstacle", obsKey: "boulder" },
+      { dt: 2, lane: 1, type: "obstacle", obsKey: "boulder" },
+      { dt: 2, lane: 2, type: "obstacle", obsKey: "boulder" },
+      { dt: 4, lane: 0, type: "obstacle", obsKey: "boulder" },
+      { dt: 4, lane: 1, type: "obstacle", obsKey: "boulder" },
+    ],
+  },
+  {
+    id: "spike_corridor",
+    cost: 8,
+    minLevel: 3,
+    entries: [
+      { dt: 0, lane: 0, type: "obstacle", obsKey: "spikes" },
+      { dt: 0, lane: 2, type: "obstacle", obsKey: "spikes" },
+      { dt: 2, lane: 0, type: "obstacle", obsKey: "spikes" },
+      { dt: 2, lane: 2, type: "obstacle", obsKey: "spikes" },
+    ],
+  },
+  {
+    id: "fallen_log",
+    cost: 5,
+    minLevel: 2,
+    entries: [
+      { dt: 0, lane: 0, type: "obstacle", obsKey: "fallen_log" },
+      { dt: 0, lane: 1, type: "obstacle", obsKey: "fallen_log" },
+    ],
+  },
+  {
+    id: "fallen_log_high",
+    cost: 5,
+    minLevel: 2,
+    entries: [
+      { dt: 0, lane: 1, type: "obstacle", obsKey: "fallen_log" },
+      { dt: 0, lane: 2, type: "obstacle", obsKey: "fallen_log" },
+    ],
+  },
+  {
+    id: "ambush_alley",
+    cost: 8,
+    minLevel: 3,
+    entries: [
+      { dt: 0, lane: 0, type: "obstacle", obsKey: "boulder" },
+      { dt: 0, lane: 2, type: "obstacle", obsKey: "boulder" },
+      { dt: 1, lane: 1, type: "enemy", enemyKey: "hornet" },
+    ],
+  },
+  {
+    id: "gauntlet",
+    cost: 10,
+    minLevel: 5,
+    entries: [
+      { dt: 0, lane: 0, type: "obstacle", obsKey: "boulder" },
+      { dt: 0, lane: 2, type: "obstacle", obsKey: "boulder" },
+      { dt: 3, lane: 1, type: "obstacle", obsKey: "boulder" },
+      { dt: 3, lane: 2, type: "obstacle", obsKey: "boulder" },
+      { dt: 6, lane: 0, type: "obstacle", obsKey: "boulder" },
+      { dt: 6, lane: 1, type: "obstacle", obsKey: "boulder" },
+    ],
+  },
+];
+
 const DIFFICULTY_BY_LEVEL = {
   1: 12,
   2: 20,
@@ -76,7 +156,35 @@ export function generateLevelSchedule() {
     schedule.push({ tick, lane, type: "location", locKey });
   }
 
-  // 2. Spend budget on enemies and obstacles.
+  // 2a. Place pre-planned patterns (spend ~30% of budget on patterns).
+  const patternBudget = Math.floor(budget * 0.3);
+  let patternSpent = 0;
+  const eligible = PATTERNS.filter((p) => p.minLevel <= lvl);
+  if (eligible.length > 0) {
+    let patternAttempts = 0;
+    while (patternSpent < patternBudget && patternAttempts < 30) {
+      patternAttempts++;
+      const pat = pick(eligible);
+      if (pat.cost > budget - patternSpent) continue;
+      const baseTick = 4 + rand(totalTicks - 10);
+      let fits = true;
+      for (const e of pat.entries) {
+        const t = baseTick + e.dt;
+        if (t < 1 || t >= totalTicks - 2) { fits = false; break; }
+        if (usedSlots.has(slotKey(t, e.lane))) { fits = false; break; }
+      }
+      if (!fits) continue;
+      for (const e of pat.entries) {
+        const t = baseTick + e.dt;
+        usedSlots.add(slotKey(t, e.lane));
+        schedule.push({ tick: t, lane: e.lane, type: e.type, obsKey: e.obsKey, enemyKey: e.enemyKey });
+      }
+      patternSpent += pat.cost;
+    }
+    budget -= patternSpent;
+  }
+
+  // 2b. Spend remaining budget on enemies and obstacles.
   const enemyPool = ENEMY_POOL_BY_LEVEL[lvl] || ENEMY_POOL_BY_LEVEL[1];
   let attempts = 0;
   while (budget > 0 && attempts < 200) {

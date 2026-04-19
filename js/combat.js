@@ -324,10 +324,15 @@ function applyEnemyDeathEffects(def) {
 export function resolveCombatRound(enemy) {
   const bonuses = getHeldBonuses();
   const mut = state.mutBonuses || getMutationBonuses(state.mutations);
-  // Slime hits enemy (Forked Pseudopod adds a flat +1).
-  const slimeDmg = bonuses.attack + (mut.attackBonus || 0);
-  enemy.hp -= slimeDmg;
-  floatText("dmg", `-${slimeDmg}`, slimeEl);
+  // Shielded enemies are immune to front attacks — must be crushed or DoT'd.
+  if (enemy.def.shielded) {
+    floatText("dmg", "BLOCKED", slimeEl);
+    pushLog(`${enemy.def.name}'s shield deflects your attack!`);
+  } else {
+    const slimeDmg = bonuses.attack + (mut.attackBonus || 0);
+    enemy.hp -= slimeDmg;
+    floatText("dmg", `-${slimeDmg}`, slimeEl);
+  }
 
   // Boss Phase 1: absorb a random player item on each hit.
   if (enemy.def.boss && enemy.def.phase === 1) {

@@ -1,8 +1,9 @@
-// SlimeVenture — slime subclass definitions and active ability logic
+// SlimeVenture — slime class definitions, specializations, and active abilities
 //
-// An Evolution Pool event offers 3 random subclasses per run. Choosing one
+// A Class Selection event offers 3 random classes per run. Choosing one
 // modifies the slime's passives and grants a unique active ability triggered
-// by the ability button (or long-press).
+// by the ability button (or long-press). At level 5, a specialization further
+// refines the chosen class with one of two upgrades.
 
 import { state, SLIME_COL, LANES, pick } from "./state.js";
 import { ITEMS } from "./data.js";
@@ -13,6 +14,7 @@ import {
   tryPickupItem,
   pushIntoInventory,
   makeItemInstance,
+  addGold,
 } from "./inventory.js";
 import { spawnEntity, removeEntity } from "./combat.js";
 import { pushLog, floatText, showBanner, renderAll, updateHUD, launchProjectile } from "./ui.js";
@@ -135,6 +137,128 @@ export const SUBCLASSES = {
 
 export const SUBCLASS_KEYS = Object.keys(SUBCLASSES);
 
+// ---------- Specializations (2 per class) ----------
+export const SPECIALIZATIONS = {
+  stoneslime: [
+    {
+      id: "ironhide",
+      name: "Ironhide",
+      emoji: "🏔️",
+      desc: "Calcify grants double shield (+20). +3 max HP.",
+      passive: { maxHpBonus: 3 },
+      abilityMod: { shieldAmount: 20 },
+    },
+    {
+      id: "juggernaut",
+      name: "Juggernaut",
+      emoji: "💪",
+      desc: "Blocking obstacles deal no damage. +2 attack.",
+      passive: { obstacleImmune: true, attackBonus: 2 },
+    },
+  ],
+  spitslime: [
+    {
+      id: "volley",
+      name: "Volley",
+      emoji: "🎯",
+      desc: "Thorn Spit hits all enemies in your lane. -2 cooldown.",
+      abilityMod: { hitAllInLane: true, cooldownReduction: 2 },
+    },
+    {
+      id: "venomspitter",
+      name: "Venomspitter",
+      emoji: "☠️",
+      desc: "Spit applies 3 ticks of poison. +50% spit damage.",
+      abilityMod: { poisonTicks: 3, damageMult: 1.5 },
+    },
+  ],
+  cauldronslime: [
+    {
+      id: "philosopher",
+      name: "Philosopher",
+      emoji: "📜",
+      desc: "Transmute requires only 1 item. Result is always rare+.",
+      abilityMod: { singleItem: true, minRarity: "rare" },
+    },
+    {
+      id: "goldweaver",
+      name: "Goldweaver",
+      emoji: "💰",
+      desc: "Transmuted items grant 15 bonus gold. +1 stomach cell.",
+      passive: { extraStomach: 1 },
+      abilityMod: { bonusGold: 15 },
+    },
+  ],
+  sparkslime: [
+    {
+      id: "inferno",
+      name: "Inferno",
+      emoji: "🌋",
+      desc: "Eruption deals 10 damage (doubled). Contact burn +2.",
+      passive: { contactBurn: 2 },
+      abilityMod: { aoeDamage: 10 },
+    },
+    {
+      id: "pyroclasm",
+      name: "Pyroclasm",
+      emoji: "☄️",
+      desc: "Eruption inflicts 3-tick burn on all enemies.",
+      abilityMod: { burnTicks: 3 },
+    },
+  ],
+  acidslime: [
+    {
+      id: "vitriolic",
+      name: "Vitriolic",
+      emoji: "💧",
+      desc: "Digesting items heals 2 HP. Dissolve cooldown -3.",
+      passive: { digestHeal: 2 },
+      abilityMod: { cooldownReduction: 3 },
+    },
+    {
+      id: "caustic",
+      name: "Caustic",
+      emoji: "🫠",
+      desc: "Digesting items deals 5 damage to adjacent enemy. Triple yield.",
+      passive: { digestDamage: 5, digestYieldMult: 3 },
+    },
+  ],
+  cogslime: [
+    {
+      id: "turbocharge",
+      name: "Turbocharge",
+      emoji: "⚡",
+      desc: "Haste lasts 20 ticks (doubled). +2 attack during haste.",
+      abilityMod: { hasteDuration: 20 },
+      passive: { hasteAttackBonus: 2 },
+    },
+    {
+      id: "machinist",
+      name: "Machinist",
+      emoji: "🔧",
+      desc: "Scrap drops tripled. Clockwork-tagged items digest instantly.",
+      passive: { scrapMult: 3, clockworkInstantDigest: true },
+    },
+  ],
+  gourmetslime: [
+    {
+      id: "sommelier",
+      name: "Sommelier",
+      emoji: "🍷",
+      desc: "Ferment advances by 75%. +1 gold per item digested.",
+      abilityMod: { fermentPct: 0.75 },
+      passive: { digestGoldBonus: 1 },
+    },
+    {
+      id: "gourmand",
+      name: "Gourmand",
+      emoji: "🍕",
+      desc: "Digesting any item heals 3 HP. Cursed items don't deal damage.",
+      passive: { digestHeal: 3, cursedImmune: true },
+    },
+  ],
+};
+
 // Roll 3 random subclasses for an evolution pool.
 export function rollSubclassChoices() {
   const shuffled = [...SUBCLASS_KEYS].sort(() => Math.random() - 0.5);
@@ -181,12 +305,15 @@ export function useAbility() {
   if (!def) return;
   const slimeEl = document.getElementById("slime");
 
+  const specMod = state._specDef?.abilityMod || {};
+
   switch (state.subclass) {
     case "stoneslime": {
-      state.shield = (state.shield || 0) + 10;
+      const shieldAmt = specMod.shieldAmount || 10;
+      state.shield = (state.shield || 0) + shieldAmt;
       state.buffs.shield = Infinity;
-      floatText("heal", "+🛡10", slimeEl);
-      pushLog("Fortify! +10 shield");
+      floatText("heal", `+🛡${shieldAmt}`, slimeEl);
+      pushLog(`Fortify! +${shieldAmt} shield`);
       break;
     }
     case "spitslime": {
@@ -206,8 +333,9 @@ export function useAbility() {
       state.inventory[ejectedIdx].item = null;
       const baseDmg = 8;
       const bonusDmg = ejected.def.digest?.enemyDamage || ejected.def.held?.attack || 3;
-      const totalDmg = baseDmg + bonusDmg;
-      // Find first enemy in slime's lane across the whole path.
+      const dmgMult = specMod.damageMult || 1;
+      const totalDmg = Math.round((baseDmg + bonusDmg) * dmgMult);
+      const hitAll = specMod.hitAllInLane;
       const targets = state.entities
         .filter(
           (e) =>
@@ -216,18 +344,23 @@ export function useAbility() {
             e.col > SLIME_COL
         )
         .sort((a, b) => a.col - b.col);
-      const target = targets[0] || null;
-      // Launch visual projectile.
-      launchProjectile(ejected.def.emoji, state.lane, target ? target.col : 5);
-      if (target) {
+      const hitTargets = hitAll ? targets : targets.slice(0, 1);
+      const firstTarget = targets[0] || null;
+      launchProjectile(ejected.def.emoji, state.lane, firstTarget ? firstTarget.col : 5);
+      if (hitTargets.length > 0) {
         setTimeout(() => {
-          target.hp -= totalDmg;
-          floatText("dmg", `-${totalDmg}`, slimeEl);
-          pushLog(`Spit ${ejected.def.name} at ${target.def.name} for ${totalDmg}!`);
-          if (target.hp <= 0) {
-            state.runStats.enemiesDefeated++;
-            removeEntity(target);
-            pushLog(`${target.def.name} destroyed!`);
+          for (const target of hitTargets) {
+            target.hp -= totalDmg;
+            if (specMod.poisonTicks) {
+              target.poisonTicks = (target.poisonTicks || 0) + specMod.poisonTicks;
+            }
+            floatText("dmg", `-${totalDmg}`, slimeEl);
+            pushLog(`Spit ${ejected.def.name} at ${target.def.name} for ${totalDmg}!`);
+            if (target.hp <= 0) {
+              state.runStats.enemiesDefeated++;
+              removeEntity(target);
+              pushLog(`${target.def.name} destroyed!`);
+            }
           }
           renderAll();
           updateHUD();
@@ -238,40 +371,55 @@ export function useAbility() {
       break;
     }
     case "cauldronslime": {
-      // Consume 2 items, produce 1 of higher rarity.
       const RARITY_UP = { common: "uncommon", uncommon: "rare", rare: "legendary", legendary: "legendary" };
       const occupied = [];
       state.inventory.forEach((cell, idx) => {
         if (cell.item) occupied.push(idx);
       });
-      if (occupied.length < 2) {
-        pushLog("Need 2 items to brew!");
+      const needCount = specMod.singleItem ? 1 : 2;
+      if (occupied.length < needCount) {
+        pushLog(`Need ${needCount} item${needCount > 1 ? "s" : ""} to brew!`);
         return;
       }
       const a = state.inventory[occupied[0]].item;
-      const b = state.inventory[occupied[1]].item;
+      const names = [a.def.name];
       state.inventory[occupied[0]].item = null;
-      state.inventory[occupied[1]].item = null;
-      const bestRarity = RARITY_UP[a.def.rarity] || RARITY_UP[b.def.rarity] || "uncommon";
+      let bestRarity = RARITY_UP[a.def.rarity] || "uncommon";
+      if (!specMod.singleItem && occupied.length >= 2) {
+        const b = state.inventory[occupied[1]].item;
+        names.push(b.def.name);
+        state.inventory[occupied[1]].item = null;
+        bestRarity = RARITY_UP[a.def.rarity] || RARITY_UP[b.def.rarity] || "uncommon";
+      }
+      if (specMod.minRarity) {
+        const RANK = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
+        if ((RANK[bestRarity] || 0) < (RANK[specMod.minRarity] || 0)) {
+          bestRarity = specMod.minRarity;
+        }
+      }
       const newKey = randomItemKey(bestRarity);
       tryPickupItem(newKey);
-      pushLog(`Brewed ${a.def.name} + ${b.def.name} → ${ITEMS[newKey].name}!`);
+      if (specMod.bonusGold) addGold(specMod.bonusGold);
+      pushLog(`Brewed ${names.join(" + ")} → ${ITEMS[newKey].name}!`);
       break;
     }
     case "sparkslime": {
-      // AoE fire damage to all enemies.
+      const aoeDmg = specMod.aoeDamage || 5;
       const targets = state.entities.filter(
         (e) => e.type === "enemy" || e.type === "terminus"
       );
       for (const t of targets) {
-        t.hp -= 5;
+        t.hp -= aoeDmg;
+        if (specMod.burnTicks) {
+          t.burnTicks = (t.burnTicks || 0) + specMod.burnTicks;
+        }
         if (t.hp <= 0) {
           state.runStats.enemiesDefeated++;
           removeEntity(t);
         }
       }
-      floatText("dmg", "🔥AOE 5", slimeEl);
-      pushLog(`Firestorm hits ${targets.length} enemies!`);
+      floatText("dmg", `🔥AOE ${aoeDmg}`, slimeEl);
+      pushLog(`Firestorm hits ${targets.length} enemies for ${aoeDmg}!`);
       break;
     }
     case "acidslime": {
@@ -295,12 +443,14 @@ export function useAbility() {
       break;
     }
     case "cogslime": {
-      state.buffs.haste = (state.buffs.haste || 0) + 10;
+      const hasteDur = specMod.hasteDuration || 10;
+      state.buffs.haste = (state.buffs.haste || 0) + hasteDur;
       floatText("heal", "⚙️ HASTE", slimeEl);
-      pushLog("Overclock! +10 ticks of haste");
+      pushLog(`Overclock! +${hasteDur} ticks of haste`);
       break;
     }
     case "gourmetslime": {
+      const fermentPct = specMod.fermentPct || 0.5;
       let advanced = 0;
       for (const cell of state.inventory) {
         if (!cell.item) continue;
@@ -308,7 +458,7 @@ export function useAbility() {
         if (!kindCfg.digests) continue;
         const remaining = cell.item.def.digestTime - cell.item.digestProgress;
         if (remaining > 0) {
-          cell.item.digestProgress += remaining * 0.5;
+          cell.item.digestProgress += remaining * fermentPct;
           advanced++;
         }
       }
@@ -324,7 +474,8 @@ export function useAbility() {
       return;
   }
 
-  state.abilityCooldown = def.ability.cooldown;
+  const cdReduction = specMod.cooldownReduction || 0;
+  state.abilityCooldown = Math.max(1, def.ability.cooldown - cdReduction);
   renderAll();
   updateHUD();
 }
@@ -334,8 +485,47 @@ export function tickAbilityCooldown() {
   if (state.abilityCooldown > 0) state.abilityCooldown--;
 }
 
+// Apply a specialization to the current class.
+export function applySpecialization(spec) {
+  state.spec = spec.id;
+  state._specDef = spec;
+
+  if (spec.passive) {
+    if (spec.passive.maxHpBonus) {
+      state.maxHp += spec.passive.maxHpBonus;
+      state.hp = Math.min(effectiveMaxHp(), state.hp + spec.passive.maxHpBonus);
+    }
+    if (spec.passive.extraStomach) {
+      for (let i = 0; i < spec.passive.extraStomach; i++) {
+        state.inventory.unshift({ kind: "digest", item: null });
+      }
+    }
+    if (spec.passive.attackBonus) {
+      // Stored on spec, applied via getSubclassPassive
+    }
+  }
+
+  pushLog(`Specialized: ${spec.name}!`);
+  showBanner(`${spec.emoji} ${spec.name}!`, 2000);
+  renderAll();
+  updateHUD();
+}
+
 // Get the subclass passive config for the current run (or empty object).
+// Merges base class passive with specialization passive.
 export function getSubclassPassive() {
   if (!state.subclass) return {};
-  return SUBCLASSES[state.subclass]?.passive || {};
+  const base = { ...(SUBCLASSES[state.subclass]?.passive || {}) };
+  if (state._specDef?.passive) {
+    for (const [k, v] of Object.entries(state._specDef.passive)) {
+      if (typeof v === "number" && typeof base[k] === "number") {
+        base[k] = (base[k] || 0) + v;
+      } else if (typeof v === "number") {
+        base[k] = v;
+      } else {
+        base[k] = v;
+      }
+    }
+  }
+  return base;
 }
