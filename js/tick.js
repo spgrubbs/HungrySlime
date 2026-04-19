@@ -5,6 +5,7 @@ import { STOMACH_KINDS, getMutationBonuses } from "./mutations.js";
 import { getHeldBonuses, effectiveMaxHp, tryPickupItem, applyDigest, addGold } from "./inventory.js";
 import { floatText, pushLog, renderAll } from "./ui.js";
 import { tickAbilityCooldown, getSubclassPassive } from "./subclass.js";
+import { getPetBonuses } from "./pets.js";
 import {
   handleEncounter,
   handleSlideInteraction,
@@ -59,6 +60,16 @@ export function tick() {
         floatText("heal", `+${mut.passiveRegen}`, slimeEl);
       }
     }
+  }
+
+  // 1c. Pet bonuses: passive heal and passive gold.
+  const petB = state._petBonuses || getPetBonuses();
+  if (petB.passiveHeal > 0 && state.tick % 8 === 0 && state.hp < effectiveMaxHp()) {
+    state.hp = Math.min(effectiveMaxHp(), state.hp + petB.passiveHeal);
+    floatText("heal", `+${petB.passiveHeal}🐾`, slimeEl);
+  }
+  if (petB.passiveGold > 0) {
+    addGold(petB.passiveGold);
   }
 
   // 2. Tick active buffs and apply buff effects
@@ -126,8 +137,9 @@ export function tick() {
   //    from STOMACH_KINDS and stack with global modifiers.
   const blessingDigest = state.buffs.swift_stomach ? 1.25 : 1;
   const acidBuff = state.buffs.acid ? 2 : 1;
+  const petDigest = 1 + (petB.digestSpeedPct || 0) / 100;
   const baseDigestStep =
-    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest * acidBuff;
+    (state.runMods?.digestSpeedMult || 1) * (mut.digestSpeedMult || 1) * blessingDigest * acidBuff * petDigest;
   const acidSlimeYield = getSubclassPassive().digestYieldMult || 1;
   for (let i = 0; i < state.inventory.length; i++) {
     const cell = state.inventory[i];
@@ -162,10 +174,17 @@ export function tick() {
     const nextCol = ent.col - 1;
 
     if (nextCol < 0) {
-      if (ent.type === "terminus") {
+      if (ent.type === "terminus" && ent.def.boss) {
         pushLog(`${ent.def.name} broke through! You lose!`);
         state.hp = 0;
         onDeath();
+        return;
+      }
+      if (ent.type === "terminus") {
+        pushLog(`${ent.def.name} escaped!`);
+        state.terminusDefeated = true;
+        removeEntity(ent);
+        onLevelComplete();
         return;
       }
       removeEntity(ent);

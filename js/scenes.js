@@ -40,6 +40,8 @@ import {
 } from "./ui.js";
 import { generateLevelSchedule } from "./pathgen.js";
 import { SUBCLASSES, rollSubclassChoices, applySubclass } from "./subclass.js";
+import { getPetBonuses } from "./pets.js";
+import { syncRunStats, refreshDailies, trackIncrement } from "./quests.js";
 
 // ---------- DOM refs ----------
 const overworldMapEl = $("overworld-map");
@@ -265,6 +267,7 @@ function enterEvolutionPool() {
     btn.innerHTML = `<span class="mc-icon">${def.emoji}</span><span class="mc-name">${def.name}</span><span class="mc-desc">${def.desc}</span>`;
     btn.addEventListener("click", () => {
       applySubclass(key);
+      trackIncrement("subclassChosen");
       eventResultEl.textContent = `You emerge from the pool as a ${def.name}!`;
       eventResultEl.classList.remove("hidden");
       for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
@@ -331,6 +334,7 @@ function enterElderScene() {
         state.inventory[idx].kind = opt.to;
         pushLog(`Elder transforms a cell: ${opt.from} → ${opt.to}`);
       }
+      trackIncrement("elderVisits");
       eventResultEl.textContent = `The Elder reshapes your cell into a ${toKind.label}.`;
       eventResultEl.classList.remove("hidden");
       for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
@@ -525,6 +529,8 @@ export function beginNewRun() {
   }
   state.map = generateRunMap();
   state.mapNode = { row: 0, col: 0 };
+  state._petBonuses = getPetBonuses();
+  refreshDailies();
   closeModal();
   setScene("run");
   updatePauseBtn();
@@ -550,7 +556,7 @@ export function goToHub() {
 export function renderHub() {
   const line = document.getElementById("hub-meta-line");
   if (line && state.meta) {
-    line.textContent = `XP: ${state.meta.availableXp} · Lifetime: ${state.meta.totalXp}`;
+    line.textContent = `XP: ${state.meta.availableXp} · 🪙 ${state.meta.gold || 0} · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0} · 💠 ${state.meta.gems || 0}`;
   }
   const hubSlime = document.querySelector(".hub-slime");
   if (hubSlime) hubSlime.textContent = getEquippedSkinEmoji();
@@ -564,9 +570,11 @@ export function openRunEndScreen(victory) {
   state.paused = true;
   updatePauseBtn();
 
+  syncRunStats();
   const xp = calculateRunXp(state.runStats);
   if (!runEndAwarded) {
     grantXp(state.meta, xp.total);
+    state.meta.gold = (state.meta.gold || 0) + (state.gold || 0);
     state.meta.scrap = (state.meta.scrap || 0) + (state.scrap || 0);
     state.meta.mana = (state.meta.mana || 0) + (state.mana || 0);
     state.meta.lastRun = {
@@ -802,6 +810,7 @@ export function openMutationLab() {
         if (!state.meta.labUnlocks) state.meta.labUnlocks = {};
         state.meta.labUnlocks[recipe.id] = true;
         saveMeta(state.meta);
+        trackIncrement("labRecipes");
         openMutationLab();
       });
     }
@@ -847,7 +856,7 @@ export function openWardrobe() {
 
   const header = document.createElement("div");
   header.className = "meta-header";
-  header.textContent = `🪙 ${state.meta.totalXp || 0} XP · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0}`;
+  header.textContent = `🪙 ${state.meta.gold || 0} · 🔩 ${state.meta.scrap || 0} · 🔮 ${state.meta.mana || 0} · 💠 ${state.meta.gems || 0}`;
   wrap.appendChild(header);
 
   if (!state.meta.wardrobe) state.meta.wardrobe = { owned: ["default"], equipped: "default" };
@@ -863,21 +872,25 @@ export function openWardrobe() {
     card.className = "meta-upgrade";
 
     let canAfford = true;
+    let canAffordGems = false;
     let costStr = "";
+    let gemCost = 0;
     if (!owned && skin.cost) {
       const parts = [];
-      if (skin.cost.gold && (state.meta.totalXp || 0) < skin.cost.gold) canAfford = false;
+      if (skin.cost.gold && (state.meta.gold || 0) < skin.cost.gold) canAfford = false;
       if (skin.cost.scrap && (state.meta.scrap || 0) < skin.cost.scrap) canAfford = false;
       if (skin.cost.mana && (state.meta.mana || 0) < skin.cost.mana) canAfford = false;
       if (skin.cost.gold) parts.push(`${skin.cost.gold}🪙`);
       if (skin.cost.scrap) parts.push(`${skin.cost.scrap}🔩`);
       if (skin.cost.mana) parts.push(`${skin.cost.mana}🔮`);
       costStr = parts.join(" + ");
+      gemCost = skin.cost.gems || Math.ceil(((skin.cost.gold || 0) + (skin.cost.scrap || 0) * 3 + (skin.cost.mana || 0) * 3) / 10) || 5;
+      canAffordGems = (state.meta.gems || 0) >= gemCost;
     }
 
     if (equipped) card.classList.add("owned");
     else if (owned) card.classList.add("available");
-    else if (canAfford) card.classList.add("available");
+    else if (canAfford || canAffordGems) card.classList.add("available");
     else card.classList.add("unavailable");
 
     const name = document.createElement("div");
@@ -894,7 +907,8 @@ export function openWardrobe() {
     foot.className = "meta-foot";
     if (equipped) foot.textContent = "✓ Equipped";
     else if (owned) foot.textContent = "Click to equip";
-    else foot.textContent = costStr || "Free";
+    else if (costStr) foot.textContent = `${costStr}${gemCost ? ` or ${gemCost}💠` : ""}`;
+    else foot.textContent = "Free";
     card.appendChild(foot);
 
     card.addEventListener("click", () => {
@@ -905,13 +919,19 @@ export function openWardrobe() {
         openWardrobe();
         return;
       }
-      if (!canAfford) return;
-      if (skin.cost?.gold) state.meta.totalXp -= skin.cost.gold;
-      if (skin.cost?.scrap) state.meta.scrap -= skin.cost.scrap;
-      if (skin.cost?.mana) state.meta.mana -= skin.cost.mana;
+      if (canAfford) {
+        if (skin.cost?.gold) state.meta.gold -= skin.cost.gold;
+        if (skin.cost?.scrap) state.meta.scrap -= skin.cost.scrap;
+        if (skin.cost?.mana) state.meta.mana -= skin.cost.mana;
+      } else if (canAffordGems) {
+        state.meta.gems -= gemCost;
+      } else {
+        return;
+      }
       wd.owned.push(skin.id);
       wd.equipped = skin.id;
       saveMeta(state.meta);
+      trackIncrement("skinsOwned");
       openWardrobe();
     });
     grid.appendChild(card);

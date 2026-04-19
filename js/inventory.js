@@ -4,6 +4,8 @@ import { state, devState, $, rand, pick, SLIME_COL } from "./state.js";
 import { ITEMS, ITEM_POOL_BY_RARITY } from "./data.js";
 import { STOMACH_KINDS, MUTATIONS, getMutationBonuses } from "./mutations.js";
 import { pushLog, floatText, renderAll, updateHUD, formatItemTooltip } from "./ui.js";
+import { getPetBonuses } from "./pets.js";
+import { trackIncrement } from "./quests.js";
 
 // ---------- DOM refs ----------
 const slimeEl = $("slime");
@@ -95,6 +97,7 @@ export function tryPickupItem(key) {
   }
   if (pushIntoInventory(inst)) {
     pushLog(`Picked up ${ITEMS[key].name}`);
+    trackIncrement("itemsPickedUp");
     return true;
   }
   pushLog(`${ITEMS[key].name} lost (full)`);
@@ -139,6 +142,7 @@ export function addGold(amount) {
 export function applyDigest(item, yieldMult = 1) {
   const d = item.def.digest || {};
   state.runStats.itemsDigested++;
+  trackIncrement("itemsDigested");
   // Hungry Void mutation: every digestion heals a flat amount.
   const mut = state.mutBonuses || getMutationBonuses(state.mutations);
   if (mut.digestHeal > 0 && state.hp < effectiveMaxHp()) {
@@ -191,14 +195,17 @@ export function applyDigest(item, yieldMult = 1) {
   }
   // Secondary resources from item tags.
   const tags = item.def.tags || [];
+  const petB = state._petBonuses || getPetBonuses();
   if (tags.includes("metal")) {
     let scrapAmt = Math.ceil(2 * yieldMult);
     if (state.subclass === "cogslime") scrapAmt *= 2;
+    scrapAmt += petB.bonusScrap || 0;
     state.scrap = (state.scrap || 0) + scrapAmt;
     pushLog(`+${scrapAmt} scrap`);
   }
   if (tags.includes("elemental")) {
-    const manaAmt = Math.ceil(2 * yieldMult);
+    let manaAmt = Math.ceil(2 * yieldMult);
+    manaAmt += petB.bonusMana || 0;
     state.mana = (state.mana || 0) + manaAmt;
     pushLog(`+${manaAmt} mana`);
   }
@@ -339,6 +346,9 @@ function renderInventoryZone() {
   if (!inventoryZoneEl) return;
   inventoryZoneEl.innerHTML = "";
   inventoryZoneEl.classList.remove("arrange-mode");
+  // Dynamic grid columns: always one row, all cells visible.
+  const cols = Math.max(6, state.inventory.length);
+  inventoryZoneEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
   state.inventory.forEach((cell, idx) => {
     const kindCfg = STOMACH_KINDS[cell.kind] || STOMACH_KINDS.none;

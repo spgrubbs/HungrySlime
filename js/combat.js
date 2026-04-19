@@ -41,6 +41,8 @@ import {
   updateHUD,
   renderAll,
 } from "./ui.js";
+import { getPetBonuses } from "./pets.js";
+import { trackIncrement, trackEvent } from "./quests.js";
 
 // ---------- DOM refs ----------
 const slimeEl = $("slime");
@@ -395,9 +397,11 @@ export function resolveCombatRound(enemy) {
   if (enemy.hp <= 0) {
     // Loot
     state.runStats.enemiesDefeated++;
+    trackIncrement("enemiesDefeated");
     const baseGold = enemy.def.gold || 0;
     const goldenTouch = state.buffs.golden_touch ? 1.5 : 1;
-    const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1) * goldenTouch);
+    const petGold = 1 + (getPetBonuses().enemyGoldPct || 0) / 100;
+    const goldDrop = Math.round(baseGold * (mut.enemyGoldMult || 1) * goldenTouch * petGold);
     addGold(goldDrop);
     pushLog(`Defeated ${enemy.def.name} (+${goldDrop}🪙)`);
     if (enemy.def.dropChance && enemy.def.dropPool && Math.random() < enemy.def.dropChance) {
@@ -410,6 +414,9 @@ export function resolveCombatRound(enemy) {
       tryPickupItem(rareKey);
       pushLog(`Elite defeated! Rare drop: ${ITEMS[rareKey].name}`);
       showBanner(`💎 Rare drop!`, 1500);
+      trackIncrement("totalElitesDefeated");
+      const node = currentMapNode();
+      if (node && node.type === "dangerous") trackIncrement("dangerousCleared");
     }
     applyEnemyDeathEffects(enemy.def);
     removeEntity(enemy);
@@ -425,7 +432,8 @@ export function resolveCombatRound(enemy) {
   // Enemy hits slime
   const rawDmg = enemy.def.attack || 0;
   const ironSkin = state.buffs.iron_skin ? 1 : 0;
-  const reduction = bonuses.damageReduction + (mut.damageReduction || 0) + ironSkin;
+  const petDR = getPetBonuses().damageReduction || 0;
+  const reduction = bonuses.damageReduction + (mut.damageReduction || 0) + ironSkin + petDR;
   let dmg = devState.godMode ? 0 : Math.max(0, rawDmg - reduction);
   // Shield buff absorbs damage before HP.
   if (dmg > 0 && state.shield > 0) {

@@ -185,6 +185,10 @@ function freshMeta() {
     availableXp: 0,
     unlocks: {},
     lastRun: null,
+    gold: 0,
+    scrap: 0,
+    mana: 0,
+    gems: 0,
   };
 }
 

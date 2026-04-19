@@ -6,6 +6,7 @@
 import { ITEMS, ENEMIES } from "./data.js";
 import { SUBCLASS_KEYS, SUBCLASSES } from "./subclass.js";
 import { MUTATION_KEYS, MUTATIONS } from "./mutations.js";
+import { PET_KEYS, PET_DEFS } from "./pets.js";
 
 export function initDevTools(api) {
   const {
@@ -33,6 +34,8 @@ export function initDevTools(api) {
     resetMeta,
     applySubclass,
     addMutation,
+    openRanch,
+    openQuestTracker,
     COLS,
     levelTickLength,
     MAX_LEVEL,
@@ -141,6 +144,22 @@ export function initDevTools(api) {
     giveMutation(key) {
       if (!MUTATIONS[key] || state.mutations.includes(key)) return;
       addMutation(key);
+      renderAll();
+    },
+    addMetaGold(n) {
+      state.meta.gold = (state.meta.gold || 0) + n;
+      renderAll();
+    },
+    addMetaScrap(n) {
+      state.meta.scrap = (state.meta.scrap || 0) + n;
+      renderAll();
+    },
+    addMetaMana(n) {
+      state.meta.mana = (state.meta.mana || 0) + n;
+      renderAll();
+    },
+    addGems(n) {
+      state.meta.gems = (state.meta.gems || 0) + n;
       renderAll();
     },
   };
@@ -257,8 +276,16 @@ export function initDevTools(api) {
         <button type="button" id="dev-wardrobe">Wardrobe</button>
       </div>
       <div class="dev-row">
+        <button type="button" id="dev-ranch">Ranch</button>
+        <button type="button" id="dev-quests">Quests</button>
         <button type="button" id="dev-meta-xp">+50 XP</button>
         <button type="button" id="dev-meta-reset">Reset Meta</button>
+      </div>
+      <div class="dev-row">
+        <button type="button" id="dev-meta-gold">+100 Meta🪙</button>
+        <button type="button" id="dev-meta-scrap">+50 Meta🔩</button>
+        <button type="button" id="dev-meta-mana">+50 Meta🔮</button>
+        <button type="button" id="dev-gems">+50 💠</button>
       </div>
     </div>
 
@@ -411,6 +438,14 @@ export function initDevTools(api) {
     togglePanel(false);
     openWardrobe();
   });
+  panel.querySelector("#dev-ranch").addEventListener("click", () => {
+    togglePanel(false);
+    openRanch();
+  });
+  panel.querySelector("#dev-quests").addEventListener("click", () => {
+    togglePanel(false);
+    openQuestTracker();
+  });
   panel.querySelector("#dev-meta-xp").addEventListener("click", () => {
     grantMetaXp(50);
     showBanner("+50 Slime XP", 1200);
@@ -419,6 +454,26 @@ export function initDevTools(api) {
   panel.querySelector("#dev-meta-reset").addEventListener("click", () => {
     resetMeta();
     showBanner("Meta progression reset", 1200);
+    updateInfo();
+  });
+  panel.querySelector("#dev-meta-gold").addEventListener("click", () => {
+    actions.addMetaGold(100);
+    showBanner("+100 Meta Gold", 1200);
+    updateInfo();
+  });
+  panel.querySelector("#dev-meta-scrap").addEventListener("click", () => {
+    actions.addMetaScrap(50);
+    showBanner("+50 Meta Scrap", 1200);
+    updateInfo();
+  });
+  panel.querySelector("#dev-meta-mana").addEventListener("click", () => {
+    actions.addMetaMana(50);
+    showBanner("+50 Meta Mana", 1200);
+    updateInfo();
+  });
+  panel.querySelector("#dev-gems").addEventListener("click", () => {
+    actions.addGems(50);
+    showBanner("+50 Gems", 1200);
     updateInfo();
   });
 
@@ -444,6 +499,8 @@ export function initDevTools(api) {
       <div>god: <b>${devState.godMode ? "ON" : "OFF"}</b> · freeGrow: <b>${devState.freeGrowth ? "ON" : "OFF"}</b></div>
       <div>buffs: <b>${buffs}</b></div>
       <div>meta XP: <b>${state.meta?.availableXp ?? 0}</b> / lifetime <b>${state.meta?.totalXp ?? 0}</b> · unlocks <b>${state.meta ? Object.keys(state.meta.unlocks || {}).length : 0}</b></div>
+      <div>meta🪙 <b>${state.meta?.gold ?? 0}</b> · 🔩 <b>${state.meta?.scrap ?? 0}</b> · 🔮 <b>${state.meta?.mana ?? 0}</b> · 💠 <b>${state.meta?.gems ?? 0}</b></div>
+      <div>pets: <b>${state.meta?.ranch ? Object.keys(state.meta.ranch.pets).length : 0}</b> · active: <b>${state.meta?.ranch ? Object.values(state.meta.ranch.pets).filter(p => p.active).length : 0}</b></div>
     `;
   }
   setInterval(updateInfo, 300);

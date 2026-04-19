@@ -41,6 +41,8 @@ import {
 import { hookInput, hookHub, hookEventView } from "./input.js";
 import { initDevTools } from "./devtools.js";
 import { applySubclass } from "./subclass.js";
+import { openRanch } from "./pets.js";
+import { openQuestTracker } from "./quests.js";
 
 function start() {
   hookInput();
@@ -99,6 +101,8 @@ function start() {
     },
     applySubclass,
     addMutation,
+    openRanch,
+    openQuestTracker,
     COLS,
     levelTickLength,
     MAX_LEVEL,
