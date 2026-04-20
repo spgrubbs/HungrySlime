@@ -39,8 +39,8 @@ import {
   pushLog,
 } from "./ui.js";
 import { generateLevelSchedule } from "./pathgen.js";
-import { SUBCLASSES, rollSubclassChoices, applySubclass } from "./subclass.js";
-import { getPetBonuses } from "./pets.js";
+import { SUBCLASSES, SUBCLASS_KEYS, rollSubclassChoices, applySubclass, SPECIALIZATIONS, applySpecialization } from "./subclass.js";
+import { PET_DEFS, PET_KEYS, getPetBonuses, togglePetActive, canAfford } from "./pets.js";
 import { syncRunStats, refreshDailies, trackIncrement } from "./quests.js";
 
 // ---------- DOM refs ----------
@@ -116,7 +116,11 @@ export function onNodeSelected(node) {
   state.entities = [];
 
   if (node.type === "evolution") {
-    enterEvolutionPool(null);
+    enterEvolutionPool();
+    return;
+  }
+  if (node.type === "specialization") {
+    enterSpecializationNode();
     return;
   }
   if (node.type === "elder") {
@@ -243,18 +247,28 @@ function resolveEventChoice(event, choice) {
   };
 }
 
-// ---------- Evolution Pool (subclass pick, overworld node) ----------
+// ---------- Evolution Pool (class pick / specialization, overworld node) ----------
 function enterEvolutionPool() {
   setScene("event");
   state.paused = true;
   state.running = false;
   updatePauseBtn();
 
+  // If player already has a class, offer specialization (if not yet specialized).
+  if (state.subclass) {
+    if (!state.spec && SPECIALIZATIONS[state.subclass]) {
+      enterSpecializationScene();
+    } else {
+      openOverworld();
+    }
+    return;
+  }
+
   const choices = rollSubclassChoices();
 
-  eventTitleEl.textContent = "🧬 Evolution Pool";
+  eventTitleEl.textContent = "🧬 Class Selection";
   eventTextEl.textContent =
-    "A luminous pool pulses with mutagenic energy. Step inside and feel your body reshape...";
+    "A luminous pool pulses with mutagenic energy. Step inside and choose your form...";
   eventChoicesEl.innerHTML = "";
   eventResultEl.classList.add("hidden");
   eventContinueBtn.classList.add("hidden");
@@ -268,7 +282,12 @@ function enterEvolutionPool() {
     btn.addEventListener("click", () => {
       applySubclass(key);
       trackIncrement("subclassChosen");
-      eventResultEl.textContent = `You emerge from the pool as a ${def.name}!`;
+      if (!state.meta.unlockedClasses) state.meta.unlockedClasses = [];
+      if (!state.meta.unlockedClasses.includes(key)) {
+        state.meta.unlockedClasses.push(key);
+        saveMeta(state.meta);
+      }
+      eventResultEl.textContent = `You evolve into the ${def.name} class!`;
       eventResultEl.classList.remove("hidden");
       for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
       eventContinueBtn.classList.remove("hidden");
@@ -280,13 +299,68 @@ function enterEvolutionPool() {
     eventChoicesEl.appendChild(btn);
   }
 
-  // Allow skipping.
   const skip = document.createElement("button");
   skip.className = "event-choice subtle";
   skip.type = "button";
   skip.textContent = "Walk past the pool";
   skip.addEventListener("click", () => openOverworld());
   eventChoicesEl.appendChild(skip);
+}
+
+// ---------- Specialization scene (subclass of chosen class) ----------
+function enterSpecializationScene() {
+  const specs = SPECIALIZATIONS[state.subclass];
+  if (!specs || specs.length === 0) {
+    openOverworld();
+    return;
+  }
+
+  eventTitleEl.textContent = "⚡ Specialization";
+  eventTextEl.textContent =
+    `Your ${SUBCLASSES[state.subclass].name} form resonates with the pool. Choose a specialization to refine your abilities.`;
+  eventChoicesEl.innerHTML = "";
+  eventResultEl.classList.add("hidden");
+  eventContinueBtn.classList.add("hidden");
+
+  for (const spec of specs) {
+    const btn = document.createElement("button");
+    btn.className = "event-choice mutation-choice";
+    btn.type = "button";
+    btn.innerHTML = `<span class="mc-icon">${spec.emoji}</span><span class="mc-name">${spec.name}</span><span class="mc-desc">${spec.desc}</span>`;
+    btn.addEventListener("click", () => {
+      applySpecialization(spec);
+      eventResultEl.textContent = `Specialized into ${spec.name}!`;
+      eventResultEl.classList.remove("hidden");
+      for (const b of eventChoicesEl.querySelectorAll("button")) b.disabled = true;
+      eventContinueBtn.classList.remove("hidden");
+      eventContinueBtn.textContent = "Continue ▶";
+      eventContinueBtn.onclick = () => openOverworld();
+      renderInventory();
+      updateHUD();
+    });
+    eventChoicesEl.appendChild(btn);
+  }
+
+  const skip = document.createElement("button");
+  skip.className = "event-choice subtle";
+  skip.type = "button";
+  skip.textContent = "Decline specialization";
+  skip.addEventListener("click", () => openOverworld());
+  eventChoicesEl.appendChild(skip);
+}
+
+// ---------- Specialization node (overworld, dedicated row) ----------
+function enterSpecializationNode() {
+  if (!state.subclass || !SPECIALIZATIONS[state.subclass] || state.spec) {
+    // No class chosen or already specialized — skip to overworld.
+    openOverworld();
+    return;
+  }
+  setScene("event");
+  state.paused = true;
+  state.running = false;
+  updatePauseBtn();
+  enterSpecializationScene();
 }
 
 // ---------- Elder scene (overworld node) ----------
@@ -447,7 +521,7 @@ export function onDeath() {
 
 // Build a fresh run from current meta. Called by Hub "Begin Adventure" and
 // by dev tools "Reset Run". Leaves the game in the run scene at row 0.
-export function beginNewRun() {
+export function beginNewRun(preSelectedClass) {
   runEndAwarded = false;
   // Recompute modifiers from current meta so purchases made mid-session
   // take effect on the next run.
@@ -501,6 +575,8 @@ export function beginNewRun() {
   state.passiveCounter = 0;
   state.growthLevel = 0;
   state.subclass = null;
+  state.spec = null;
+  state._specDef = null;
   state.abilityCooldown = 0;
   state.mutations = [];
   refreshMutationBonuses();
@@ -526,6 +602,9 @@ export function beginNewRun() {
   state.map = generateRunMap();
   state.mapNode = { row: 0, col: 0 };
   state._petBonuses = getPetBonuses();
+  if (preSelectedClass && SUBCLASSES[preSelectedClass]) {
+    applySubclass(preSelectedClass);
+  }
   refreshDailies();
   closeModal();
   setScene("run");
@@ -537,6 +616,131 @@ export function beginNewRun() {
 // Legacy alias retained so dev tools and run-end keep working.
 export function restartRun() {
   beginNewRun();
+}
+
+// ---------- Loadout screen (pre-run) ----------
+export function openLoadout() {
+  if (!state.meta.unlockedClasses) state.meta.unlockedClasses = [];
+  const ranch = state.meta.ranch || { pets: {} };
+  let slots = 1;
+  if (state.meta.unlocks?.petSlot2) slots = 2;
+  if (state.meta.unlocks?.petSlot3) slots = 3;
+
+  let selectedClass = null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "meta-menu";
+
+  // --- Class section ---
+  const classLabel = document.createElement("div");
+  classLabel.className = "meta-tier-label";
+  classLabel.textContent = "🧬 Class";
+  wrap.appendChild(classLabel);
+
+  const classGrid = document.createElement("div");
+  classGrid.className = "meta-grid";
+
+  const noClassCard = document.createElement("div");
+  noClassCard.className = "meta-upgrade owned";
+  noClassCard.innerHTML = `<div class="meta-name">🟢 No Class</div><div class="meta-desc">Discover classes at the Evolution Pool during runs</div>`;
+  noClassCard.addEventListener("click", () => {
+    selectedClass = null;
+    refreshClassCards();
+  });
+  classGrid.appendChild(noClassCard);
+
+  const classCards = [{ el: noClassCard, key: null }];
+
+  for (const key of state.meta.unlockedClasses) {
+    const def = SUBCLASSES[key];
+    if (!def) continue;
+    const card = document.createElement("div");
+    card.className = "meta-upgrade available";
+    card.innerHTML = `<div class="meta-name">${def.emoji} ${def.name}</div><div class="meta-desc">${def.desc}</div>`;
+    card.addEventListener("click", () => {
+      selectedClass = key;
+      refreshClassCards();
+    });
+    classGrid.appendChild(card);
+    classCards.push({ el: card, key });
+  }
+
+  function refreshClassCards() {
+    for (const c of classCards) {
+      c.el.classList.remove("owned", "available");
+      c.el.classList.add(c.key === selectedClass ? "owned" : "available");
+    }
+  }
+
+  wrap.appendChild(classGrid);
+
+  // --- Pet section ---
+  const petLabel = document.createElement("div");
+  petLabel.className = "meta-tier-label";
+  petLabel.style.marginTop = "12px";
+  const activeCount = Object.values(ranch.pets || {}).filter((p) => p.active).length;
+  petLabel.textContent = `🐾 Pets (${activeCount}/${slots})`;
+  wrap.appendChild(petLabel);
+
+  const petGrid = document.createElement("div");
+  petGrid.className = "meta-grid";
+
+  const petCardEls = [];
+  for (const [id, pet] of Object.entries(ranch.pets || {})) {
+    const def = PET_DEFS[id];
+    if (!def) continue;
+    const card = document.createElement("div");
+    card.className = "meta-upgrade";
+    card.classList.add(pet.active ? "owned" : "available");
+    const bonusDesc = Object.entries(def.bonusPerLevel)
+      .map(([k, v]) => `${k}: +${v * pet.level}`)
+      .join(", ");
+    card.innerHTML = `<div class="meta-name">${def.emoji} ${def.name} Lv${pet.level}</div><div class="meta-desc">${bonusDesc}</div><div class="meta-foot">${pet.active ? "✓ Active" : "Click to activate"}</div>`;
+    card.addEventListener("click", () => {
+      if (pet.active) {
+        pet.active = false;
+      } else {
+        const count = Object.values(ranch.pets).filter((p) => p.active).length;
+        if (count >= slots) return;
+        pet.active = true;
+      }
+      saveMeta(state.meta);
+      openLoadout();
+    });
+    petGrid.appendChild(card);
+    petCardEls.push(card);
+  }
+
+  if (Object.keys(ranch.pets || {}).length === 0) {
+    const noPets = document.createElement("div");
+    noPets.style.cssText = "color:#888;font-size:12px;";
+    noPets.textContent = "No pets yet. Visit the Slime Ranch to adopt some!";
+    petGrid.appendChild(noPets);
+  }
+
+  wrap.appendChild(petGrid);
+
+  openModal({
+    title: "⚔️ Loadout",
+    bodyEl: wrap,
+    actions: [
+      {
+        label: "🌱 Start Run",
+        primary: true,
+        onClick: () => {
+          closeModal();
+          beginNewRun(selectedClass);
+        },
+      },
+      {
+        label: "Back",
+        onClick: () => {
+          closeModal();
+          renderHub();
+        },
+      },
+    ],
+  });
 }
 
 // Return to the village hub. Used after run-end and from a future "give up"

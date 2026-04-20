@@ -64,19 +64,26 @@ export const NODE_TYPES = {
     tickLength: 0,
   },
   evolution: {
-    label: "Evolution",
+    label: "Class",
     emoji: "🧬",
     color: "#2ad9a5",
     tickLength: 0,
   },
+  specialization: {
+    label: "Specialization",
+    emoji: "⚡",
+    color: "#d9a52a",
+    tickLength: 0,
+  },
 };
 
-const ROW_WIDTHS = [1, 3, 3, 3, 1, 3, 3, 3, 3, 1];
+const ROW_WIDTHS = [1, 3, 3, 3, 1, 3, 3, 1, 3, 1];
 const NUM_PATHS = 5;
 const MIDDLE_TYPE_BAG = ["combat", "combat", "combat", "treasure", "event", "elder"];
 const PRE_BOSS_TYPE_BAG = ["combat", "dangerous", "dangerous", "event", "treasure"];
 export const EVOLUTION_ROW = 4;
-const CONVERGENCE_ROWS = new Set([EVOLUTION_ROW]);
+export const SPECIALIZATION_ROW = 7;
+const CONVERGENCE_ROWS = new Set([EVOLUTION_ROW, SPECIALIZATION_ROW]);
 
 function rand(n) {
   return Math.floor(Math.random() * n);
@@ -136,6 +143,8 @@ export function generateRunMap() {
         node.type = "boss";
       } else if (r === EVOLUTION_ROW) {
         node.type = "evolution";
+      } else if (r === SPECIALIZATION_ROW) {
+        node.type = "specialization";
       } else if (r === rows - 2) {
         node.type = pick(PRE_BOSS_TYPE_BAG);
       } else {

@@ -58,7 +58,9 @@ export const state = {
   regenCounter: 0,
   passiveCounter: 0, // separate counter for mutation passive regen
   growthLevel: 0, // number of times player has grown
-  subclass: null, // chosen subclass key (e.g. "spitslime")
+  subclass: null, // chosen class key (e.g. "spitslime")
+  spec: null, // chosen specialization id
+  _specDef: null, // cached specialization definition
   abilityCooldown: 0, // ticks until active ability is usable again
   evolutionOffered: false, // whether evolution pool has appeared this run
   log: [],

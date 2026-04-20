@@ -96,6 +96,21 @@ export const UPGRADES = {
     desc: "Growth costs 25% less gold",
     effect: { growCostMult: 0.75 },
   },
+  petSlot2: {
+    tier: 2,
+    cost: 15,
+    name: "Pet Harness",
+    desc: "Bring 2 pets on a run (up from 1)",
+    effect: { petSlots: 2 },
+  },
+  petSlot3: {
+    tier: 2,
+    cost: 25,
+    name: "Pack Leader",
+    desc: "Bring 3 pets on a run",
+    requires: "petSlot2",
+    effect: { petSlots: 3 },
+  },
 
   // --- Tier 3: Starting Loadout ---
   startHerb: {
